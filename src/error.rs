@@ -6,6 +6,9 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
-    #[error("Cannot decrement count. Already at zero.")]
-    CannotDecrementCount,
+    #[error("did document not found.")]
+    DidDocumentNotFound,
+
+    #[error("did document error.")]
+    DidDocumentError,
 }

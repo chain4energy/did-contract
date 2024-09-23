@@ -1,4 +1,4 @@
-use cosmwasm_std::{Response, StdResult};
+use cosmwasm_std::{Response, StdError, StdResult};
 // use cw_storage_plus::Item;
 use cw_storage_plus::Map;
 use sylvia::{contract, entry_points};
@@ -6,6 +6,7 @@ use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
 
 
 
+use crate::error::ContractError;
 use crate::state::DidDocument;
 use crate::state::Did;
 pub struct DidContract {
@@ -14,6 +15,7 @@ pub struct DidContract {
 
 #[entry_points]
 #[contract]
+#[sv::error(ContractError)]
 impl DidContract {
     pub const fn new() -> Self {
         Self {
@@ -27,10 +29,23 @@ impl DidContract {
     }
 
     #[sv::msg(query)]
-    pub fn get_did_document(&self, ctx: QueryCtx, did: String) -> StdResult<DidDocument> {
+    pub fn get_did_document(&self, ctx: QueryCtx, did: String) -> Result<DidDocument, ContractError> {
         // Load and return the current value of the counter
-        let did_doc: DidDocument = self.did_docs.load(ctx.deps.storage, did)?;
-        Ok(did_doc)
+        self.did_docs.has(ctx.deps.storage, did.clone());
+
+        
+        let did_doc_result = self.did_docs.load(ctx.deps.storage, did);
+        if did_doc_result.is_err() {
+            
+            let e = did_doc_result.err().unwrap();
+            let g = match e {
+                StdError::NotFound { kind, backtrace } => ContractError::DidDocumentNotFound,
+                _ => ContractError::DidDocumentError,
+
+            };
+            return Err(g);
+        }
+        return Ok(did_doc_result.unwrap());
     }
 
     #[sv::msg(exec)]
@@ -73,7 +88,7 @@ mod tests {
     use sylvia::cw_multi_test::IntoAddr;
     use sylvia::multitest::App;
 
-    use crate::{contract::sv::mt::{CodeId, DidContractProxy}, state::{Did, DidDocument, Service}};
+    use crate::{contract::sv::mt::{CodeId, DidContractProxy}, error::ContractError, state::{Did, DidDocument, Service}};
 
     #[test]
     fn instantiate() {
@@ -85,7 +100,8 @@ mod tests {
         let contract = code_id.instantiate().call(&owner).unwrap();
     
         let did_owner = "did_owner";
-        // let did_document = contract.get_did_document("did_owner".to_string()).unwrap();
+        let no_did = contract.get_did_document("did_owner".to_string());
+         assert_eq!("Generic error: Querier contract error: did document not found.", no_did.err().unwrap().to_string());
         // assert_eq!(count, 42);
 
         let new_did_doc = DidDocument{
@@ -97,7 +113,8 @@ mod tests {
                 service_endpoint: "dfdsfs".to_string()
             }]
         };
-        let result = contract.create_did_document(new_did_doc.clone()).call(&owner).unwrap();
+        let result = contract.create_did_document(new_did_doc.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
 
         let did_document = contract.get_did_document("new_did".to_string()).unwrap();
         assert_eq!(new_did_doc.clone(), did_document.clone());
