@@ -3,9 +3,6 @@ use cosmwasm_std::{Response, StdError, StdResult};
 use cw_storage_plus::Map;
 use sylvia::{contract, entry_points};
 use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
-
-
-
 use crate::error::ContractError;
 use crate::state::{DidDocument, Service};
 use crate::state::Did;

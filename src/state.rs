@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 use cosmwasm_schema::cw_serde;
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
