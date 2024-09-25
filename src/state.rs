@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use cosmwasm_schema::cw_serde;
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
@@ -15,14 +17,14 @@ pub struct DidDocument {
 
 impl DidDocument {
     pub fn has_controller(&self, did: &Did) -> bool {
-        for i in  &self.controller {
-                if i == did {
-                    return true;
-                }
-        }
-        return false;
+        self.controller.contains(did)
     }
+}
 
+impl DidDocument {
+    pub fn has_service(&self, service_did: &Did) -> bool {
+        self.service.iter().any(|service| &service.id == service_did)
+    }
 }
 
 #[cw_serde]
@@ -63,6 +65,20 @@ impl<'de> Deserialize<'de> for Did {
         Ok(Did(s))
     }
 }
+
+impl ToString for Did {
+    #[inline]
+    fn to_string(&self) -> String {
+        self.0.clone()
+    }
+}
+
+// impl PartialEq for Did {
+//     #[inline]
+//     fn eq(&self, other: &Did) -> bool {
+//         self.0 == other.0
+//     }
+// }
 
 impl Did {
     pub fn new(s: &str) -> Self {
