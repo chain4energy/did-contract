@@ -59,22 +59,8 @@ fn connect_docker() {
     // assert!(result.is_err(), "Expected Err, but got an Ok");
     // assert_eq!("Generic error: Querier contract error: Did document not found", result.err().unwrap().to_string());
 }
-#[test]
-fn execute_query() {
-    let result = query_balance_sync("c4e1au3vecfch0h5p3p90cxftrkwyfp63mj7lgxc4n", "http://localhost:31317");
-}
 
-fn query_balance_sync(account_address: &str, node_url: &str) -> Result<Vec<Coin>, Box<dyn Error>> {
 
-    let client = ReqwestClient::new();
-    let url = format!("{}/cosmos/bank/v1beta1/balances/{}", node_url, account_address);
-    let response = client.get(&url).send()?.error_for_status()?;
-
-    let response_text = response.text()?;
-    println!("MESSAGE: {}", response_text);
-    let balance_response: QueryAllBalancesResponse = from_str(&response_text)?;
-    Ok(balance_response.balances)
-}
 
 // Function to replicate `run_chain` using the `bollard` library
 async fn run_chain(docker: &Docker) -> Result<(), bollard::errors::Error> {
@@ -107,10 +93,10 @@ async fn run_chain(docker: &Docker) -> Result<(), bollard::errors::Error> {
 
     // Create and start containers
     for (name, volume, port_bindings) in [
-        ("chain-node-did-1", ".e2e/node1", [("26657/tcp", "31657"), ("1317/tcp", "31317")]),
-        ("chain-node-did-2", ".e2e/node2", [("26657/tcp", "32657"), ("1317/tcp", "32317")]),
-        ("chain-node-did-3", ".e2e/node3", [("26657/tcp", "33657"), ("1317/tcp", "33317")]),
-        ("chain-node-did-4", ".e2e/node4", [("26657/tcp", "34657"), ("1317/tcp", "34317")]),
+        ("chain-node-did-1", ".e2e/node1", [("26657/tcp", "31657"), ("1317/tcp", "31317"), ("9090/tcp", "31090")]),
+        ("chain-node-did-2", ".e2e/node2", [("26657/tcp", "32657"), ("1317/tcp", "32317"), ("9090/tcp", "32090")]),
+        ("chain-node-did-3", ".e2e/node3", [("26657/tcp", "33657"), ("1317/tcp", "33317"), ("9090/tcp", "33090")]),
+        ("chain-node-did-4", ".e2e/node4", [("26657/tcp", "34657"), ("1317/tcp", "34317"), ("9090/tcp", "34090")]),
     ] {
 
         let volume_absolute_path = current_dir.join(volume).to_string_lossy().into_owned();
@@ -195,143 +181,3 @@ fn create_container_config(volume: &str, user_str: &str, port_bindings: &[(&str,
 // }
 
 
-
-// --------------------------------------------------------------------
-
-
-fn bank_send(
-    sender_address: &str,
-    recipient_address: &str,
-    amount: u64,
-    signing_key: SigningKey,
-    rpc_url: &str,
-    chain_id: &str,
-    sequence: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // let coin = Coin {
-    //     denom: Denom::from_str("uc4e").expect("denom error"),
-    //     amount: amount.into(),  // Sending `amount` in uatom (smallest denomination)
-    // };
-
-    let coin = Coin {
-        denom: "uc4e".to_string(),
-        amount: amount.to_string(),  // Sending `amount` in uatom (smallest denomination)
-    };
-
-    // Create a MsgSend transaction message
-    let msg_send = MsgSend {
-        from_address: sender_address.to_string(),
-        to_address: recipient_address.to_string(),
-        amount: vec![coin.into()],
-    };
-
-    let mut msg_bytes = Vec::new();
-    msg_send.encode(&mut msg_bytes)?;
-
-    // Wrap the message in an Any type
-    let msg_any = Any {
-        type_url: "/cosmos.bank.v1beta1.MsgSend".to_string(),
-        value: msg_bytes,
-    };
-
-    let fee_coin = Coin {
-        denom: "uc4e".to_string(),
-        amount: 5000.to_string(),  // Sending `amount` in uatom (smallest denomination)
-    };
-    let fee = Fee::from_amount_and_gas(
-        cosmrs::Coin::try_from(fee_coin).expect("coin conversion error"),
-        200000u64,
-    );
-    // let fee = Fee::from_amount_and_gas(
-    //     Coin {
-    //         denom: Denom::from_str("uc4e").expect("denom error"),
-    //         amount: 5000u64.into(),  // Small gas fee
-    //     }.into(),
-    //     200000u64,
-    // );
-
-    broadcast_tx(vec![msg_any], fee, signing_key, rpc_url, chain_id, sequence)
-}
-
-
-fn broadcast_tx(
-    messages: Vec<Any>,
-    fee: Fee,
-    signing_key: SigningKey,
-    rpc_url: &str,
-    chain_id: &str,
-    sequence: u64,
-) -> Result<(), Box<dyn std::error::Error>> {
-    // Create a runtime to run async code in a sync function
-    let rt = tokio::runtime::Runtime::new()?;
-    rt.block_on(async {
-        let chain_id = chain::Id::from_str(chain_id)?;
-        let tx_body = Body::new(messages, "Test transaction", 0u32);
-        let signer_info = SignerInfo::single_direct(None, sequence);
-        let auth_info: AuthInfo = AuthInfo { signer_infos: vec![signer_info], fee: fee };
-        let sign_doc = SignDoc::new(&tx_body, &auth_info, &chain_id, 0)?;
-
-        let tx_raw = sign_doc.sign(&signing_key)?;
-        let tx_bytes = tx_raw.to_bytes()?;
-        let rpc_client = HttpClient::new(rpc_url)?; 
-        let response = rpc_client.broadcast_tx_commit(tx_bytes).await?;
-        if  response.tx_result.code.is_ok() {
-            println!("Transaction included in block: {:?}", response.height);
-            println!("Transaction hash: {:?}", response.hash);
-            println!("DeliverTx response: {:?}", response.tx_result);
-        } else {
-            println!("Transaction failed to be included in block: {:?}", response.check_tx);
-            return Err("tx failed".into());
-        }
-
-        Ok(())
-    })
-}
-
-const PBKDF2_ROUNDS: u32 = 2048;
-
-fn derive_private_key_from_mnemonic(mnemonic: &str, derivation_path_str: &str) -> Result<SigningKey, Box<dyn Error>> {
-    let mnemonic = Mnemonic::parse(mnemonic)?;
-
-    // Generate the seed from the mnemonic
-    let salt = format!("mnemonic{}", "");
-    let mut seed = [0u8; 64]; // BIP-39 seed is 64 bytes
-    pbkdf2::<Hmac<Sha512>>(mnemonic.to_string().as_bytes(), salt.as_bytes(), PBKDF2_ROUNDS, &mut seed)?;
-
-    // Derive the extended private key (XPrv) using BIP-32
-    let derivation_path = DerivationPath::from_str(derivation_path_str)?;
-    let xprv = XPrv::derive_from_path(&seed, &derivation_path)?;
-
-    // Step 6: Extract the signing key (secp256k1 private key) from the extended private key
-    let signing_key = SigningKey::from_slice(&xprv.to_bytes().as_slice())?;
-
-    Ok(signing_key)
-}
-
-#[test]
-fn test_mnemonic_derivation() {
-    let result = derive_private_key_from_mnemonic(
-        "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss", 
-        "m/44'/118'/0'/0/0");
-    assert!(result.is_ok(), "Expected Ok but is Err");
-
-
-
-    let result = result.unwrap();
-    let acc = result.public_key().account_id("c4e").expect("acc err");
-    assert_eq!("c4e1au3vecfch0h5p3p90cxftrkwyfp63mj7lgxc4n", acc.to_string());
-
-}
-
-#[test]
-fn test_send_coins() {
-    let result = derive_private_key_from_mnemonic(
-        "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss", 
-        "m/44'/118'/0'/0/0");
-    assert!(result.is_ok(), "Expected Ok but is Err");
-
-    let result = bank_send("c4e1au3vecfch0h5p3p90cxftrkwyfp63mj7lgxc4n", 
-        "c4e1yyjfd5cj5nd0jrlvrhc5p3mnkcn8v9q8fdd9gs", 
-        100, result.unwrap(), "http://localhost:31657", "c4e-chain-compose", 4 );
-    assert!(result.is_ok(), "Expected Ok but is Err");
-}
