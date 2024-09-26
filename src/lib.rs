@@ -6,6 +6,9 @@ pub mod contract;
 mod msg;
 mod state;
 mod error;
+
+#[cfg(test)]
+mod e2e_test;
 // mod msg;
 
 // #[entry_point]
