@@ -78,3 +78,6 @@ _replace:
 		sed -i "s/$$old_value/$$new_value/g" ${E2E_TEST_RUN_PATH}/$$file; \
 	done < ${REPLACE_FILE}' 
 
+expand:
+	-mkdir .expand
+	cargo expand > .expand/expand.rs
