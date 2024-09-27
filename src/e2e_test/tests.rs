@@ -7,7 +7,7 @@ use serial_test::serial;
 // use tokio::time::sleep;
 use std::{sync::{Mutex, Once}, thread::sleep, time::Duration};
 
-use crate::e2e_test::{cosmos::ADDR_PREFIX, docker::DockerControler};
+use crate::{contract::DidContract, e2e_test::{cosmos::ADDR_PREFIX, docker::DockerControler}, state::DidDocument};
 
 use super::cosmos::{derive_private_key_from_mnemonic, ChainClient};
 
@@ -25,9 +25,9 @@ const CONTRACT_PATH: &str = "./artifacts/did_contract.wasm";
 #[test]
 #[serial]
 fn create_did_document() {
-    // init_suite();
-    setup_context();
-    println!("RUN TEST 1");
+    init_suite();
+    // setup_context();
+    println!("RUN create_did_document");
 
     let context = CONTEXT.get().expect("Docker controller is not initialized");
     let context = context.lock().expect("Failed to lock Docker controller");
@@ -50,23 +50,27 @@ fn create_did_document() {
     //     }
     // }"#;
 
+    let did = "did:example:000432";
+
+    let did_doc = DidDocument { 
+        id: crate::state::Did::new(did), 
+        controller: vec![crate::state::Did::new("did:user:000131")], 
+        service: vec![crate::state::Service{
+            id: crate::state::Did::new("did:service:000131"),
+            a_type: "Chargera".to_string(),
+            service_endpoint: "http://chargera.io".to_string()
+        }],
+     };
+
     let create_msg = super::super::contract::sv::ExecMsg::CreateDidDocument { 
-        did_doc: crate::state::DidDocument { 
-            id: crate::state::Did::new("did:example:000131"), 
-            controller: vec![crate::state::Did::new("did:user:000131")], 
-            service: vec![crate::state::Service{
-                id: crate::state::Did::new("did:service:000131"),
-                a_type: "Chargera".to_string(),
-                service_endpoint: "http://chargera.io".to_string()
-            }],
-         } 
+        did_doc: did_doc.clone()
     };
     
     let msg = json!(create_msg).to_string();
     println!("Message: {msg}");
 
-    // let result = context.chain.tx.execute_contract_msg(&address, &context.contract_address, msg, vec![], &key);
-    let result = context.chain.tx.execute_contract_msg(&address, "c4e14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s86dt7n", &msg, vec![], &key);
+    let result = context.chain.tx.execute_contract_msg(&address, &context.contract_address, &msg, vec![], &key);
+    // let result = context.chain.tx.execute_contract_msg(&address, "c4e14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s86dt7n", &msg, vec![], &key);
     
     if result.is_err() {
         assert_eq!("Generic error: Querier contract error: Did document not found", result.err().unwrap().to_string());
@@ -74,6 +78,23 @@ fn create_did_document() {
         assert!(result.is_ok(), "Expected Ok, but got an Err");
         
     }
+    let query_msg = super::super::contract::sv::QueryMsg::GetDidDocument { did: did.to_string() };
+    let query = json!(query_msg).to_string();
+    println!("Query: {query}");
+    let result = context.chain.query.contract(&context.contract_address, &query);
+    // if result.is_err() {
+    //     assert_eq!("Generic error: Querier contract error: Did document not found", result.err().unwrap().to_string());
+    // } else {
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+    let result = result.unwrap();
+
+    let resp = String::from_utf8(result.data).expect("parse result error");
+    println!("Resposne: {resp}");
+    let resp_did_doc: DidDocument= serde_json::from_str(&resp).expect("desrializing did doc error");
+    assert_eq!(did_doc.clone(), resp_did_doc);
+
+
+    // }
 }
 
 #[test]
@@ -163,9 +184,9 @@ fn setup() {
 #[dtor]
 fn teardown() {
     println!("TEARDOWN SUITE");
-    // let context = CONTEXT.get().expect("Docker controller is not initialized");
-    // let context = context.lock().expect("Failed to lock Docker controller");
-    // context.docker.stop_chain().expect("stop chain error");
+    let context = CONTEXT.get().expect("Docker controller is not initialized");
+    let context = context.lock().expect("Failed to lock Docker controller");
+    context.docker.stop_chain().expect("stop chain error");
   
 }
 

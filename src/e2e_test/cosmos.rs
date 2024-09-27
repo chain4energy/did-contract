@@ -1,8 +1,11 @@
 use bip32::{DerivationPath, XPrv};
 use bip39::Mnemonic;
-use cosmos_sdk_proto::cosmos::auth::v1beta1::query_client::QueryClient;
+use cosmos_sdk_proto::cosmos::auth::v1beta1::query_client::QueryClient as AuthQueryClient;
+use cosmos_sdk_proto::cosmwasm::wasm::v1::query_client::QueryClient as WasmQueryClient;
+
 use cosmos_sdk_proto::cosmos::auth::v1beta1::{ModuleAccount, QueryAccountRequest};
 use cosmos_sdk_proto::cosmos::base::abci::v1beta1::TxMsgData;
+use cosmos_sdk_proto::cosmwasm::wasm::v1::{QuerySmartContractStateRequest, QuerySmartContractStateResponse};
 use cosmos_sdk_proto::prost::Name;
 use cosmos_sdk_proto::traits::Message;
 use cosmos_sdk_proto::Any;
@@ -81,6 +84,11 @@ impl Query {
         rt.block_on(async { self.base_account_async(account_address).await })
     }
 
+    pub fn contract(&self, contract_address: &str, query: &str) -> Result<QuerySmartContractStateResponse, Box<dyn Error>> {
+        let rt = tokio::runtime::Runtime::new()?;
+        rt.block_on(async { self.contract_async(contract_address, query).await })
+    }
+
     async fn base_account_async(
         &self,
         account_address: &str,
@@ -122,12 +130,31 @@ impl Query {
         Ok(response.into_inner())
     }
 
-    async fn create_auth_query_client(&self) -> Result<QueryClient<Channel>, Box<dyn Error>> {
+    async fn create_auth_query_client(&self) -> Result<AuthQueryClient<Channel>, Box<dyn Error>> {
         let channel = Channel::from_shared(self.grpc_url.clone())?
             .connect()
             .await?;
         // Create a QueryClient for the Cosmos SDK auth module
-        Ok(QueryClient::new(channel))
+        Ok(AuthQueryClient::new(channel))
+    }
+
+    async fn contract_async(&self, contract_address: &str, query: &str) -> Result<QuerySmartContractStateResponse, Box<dyn Error>> {
+        let mut client = self.create_wasm_client().await?;
+
+        let request = tonic::Request::new(QuerySmartContractStateRequest {
+            address: contract_address.to_string(),
+            query_data: query.into()
+        });
+        let response: tonic::Response<QuerySmartContractStateResponse> = client.smart_contract_state(request).await?;
+        Ok(response.into_inner())
+    }
+
+    async fn create_wasm_client(&self) -> Result<WasmQueryClient<Channel>, Box<dyn Error>> {
+        let channel = Channel::from_shared(self.grpc_url.clone())?
+            .connect()
+            .await?;
+        // Create a QueryClient for the Cosmos SDK auth module
+        Ok(WasmQueryClient::new(channel))
     }
 }
 
