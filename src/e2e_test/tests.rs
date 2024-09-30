@@ -102,7 +102,7 @@ fn my_test_3() {
 }
 
 fn init_suite() {
-    e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH);
+    e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH, "did-contract");
 }
 
 fn create_key_and_address() -> (SigningKey, String){
