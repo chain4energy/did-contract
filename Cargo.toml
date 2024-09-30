@@ -43,6 +43,6 @@ base64 = "0.22"
 ctor = "0.2"
 serial_test = "3.1"
 once_cell = "1.19" 
-docker-controller = { git = " http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/docker-controller.git", branch = "master" }
-cosm-client = { git = " http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/cosm-client.git", branch = "master" }
+# docker-controller = { git = " http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/docker-controller.git", branch = "master" }
+# cosm-client = { git = " http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/cosm-client.git", branch = "master" }
 e2e-test-suite = { git = " http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/e2e-test-suite.git", branch = "master" }

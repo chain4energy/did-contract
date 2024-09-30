@@ -81,3 +81,9 @@ _replace:
 expand:
 	-mkdir .expand
 	cargo expand > .expand/expand.rs
+
+update_git_dependencies:
+	cargo update
+# cargo update -p docker-controller
+# cargo update -p cosm-client
+# cargo update -p e2e-test-suite
