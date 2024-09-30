@@ -4,7 +4,7 @@ use serde_json::json;
 use serial_test::serial;
 use e2e_test_suite::{ADDR_PREFIX, derive_private_key_from_mnemonic};
 
-use crate::{state::DidDocument};
+use crate::state::DidDocument;
 
 const MENMONIC: &str = "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
@@ -14,7 +14,7 @@ const CONTRACT_PATH: &str = "./artifacts/did_contract.wasm";
 #[test]
 #[serial]
 fn create_did_document() {
-    e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH);
+    init_suite();
     // setup_context();
     println!("RUN create_did_document");
 
@@ -89,16 +89,20 @@ fn create_did_document() {
 #[test]
 #[serial]
 fn my_test_2() {
-    // e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH);
+    init_suite();
     println!("RUN TEST 2")
 }
 
 #[test]
 #[serial]
 fn my_test_3() {
-    // e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH);
+    init_suite();
     // setup_context();
     println!("RUN TEST 3");
+}
+
+fn init_suite() {
+    e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH);
 }
 
 fn create_key_and_address() -> (SigningKey, String){
