@@ -23,8 +23,24 @@ optimize:
 # docker volume rm empty-contract_cache
 # docker volume rm registry_cache
 
+DOCKER_DIR := ./.docker
+DOCKER_FILE := $(DOCKER_DIR)/Dockerfile
+
+# Task to check if the file exists, and if not, do something
+
 build-c4e-chain-docker:
-	docker build -t c4e-chain-did:v1.4.3 ./e2e-test/docker/
+	@if [ ! -f $(DOCKER_FILE) ]; then \
+		echo "File $(DOCKER_FILE) does not exist, cloning repository..."; \
+		-rm -rf $(DOCKER_DIR); \
+		mkdir -p $(DOCKER_DIR); \
+		git clone --branch v1.4.3.0 --depth 1 http://gitlab.sce-ovoo.pl/c4e/chain/test/e2e-contract-test/c4e-chain-e2e-test-docker.git ./.docker; \
+	else \
+		echo "File $(DOCKER_FILE) already exists."; \
+	fi
+	docker build -t c4e-chain-e2e-test:v1.4.3 ./.docker
+
+clean-dockerfile:
+	-rm -rf $(DOCKER_DIR)
 
 E2E_TEST_RUN_PATH=.e2e
 E2E_TEST_CONFIG_PATH=./e2e-test/config
