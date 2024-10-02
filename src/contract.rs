@@ -41,7 +41,7 @@ impl DidContract {
     pub fn is_did_controller(&self, ctx: QueryCtx, did: String, controller: String) -> Result<bool, ContractError> {
         let did_doc_result: Result<DidDocument, StdError> = self.did_docs.load(ctx.deps.storage, did);
         match did_doc_result {
-            Ok(did_document) => did_document.is_controller(ctx.deps.storage, &self.did_docs, controller),
+            Ok(did_document) => did_document.is_controller(ctx.deps.storage, &self.did_docs, &controller),
             Err(e) => match e {
                 StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
                 _ => Err(ContractError::DidDocumentError(e)),
@@ -76,8 +76,8 @@ impl DidContract {
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.has_controller(&sender) {
-            return Err(ContractError::DidDocumentWrongOwner);
+        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+            return Err(ContractError::Unauthorized);
         }
 
         let r = self.did_docs.save(ctx.deps.storage, new_did_doc.id.to_string(), &new_did_doc);
@@ -99,8 +99,8 @@ impl DidContract {
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.has_controller(&sender) {
-            return Err(ContractError::DidDocumentWrongOwner);
+        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+            return Err(ContractError::Unauthorized);
         }
 
         if did_doc.has_controller(&controller) {
@@ -128,8 +128,8 @@ impl DidContract {
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.has_controller(&sender) {
-            return Err(ContractError::DidDocumentWrongOwner);
+        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+            return Err(ContractError::Unauthorized);
         }
 
         if !did_doc.has_controller(&controller) {
@@ -156,8 +156,8 @@ impl DidContract {
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.has_controller(&sender) {
-            return Err(ContractError::DidDocumentWrongOwner);
+        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+            return Err(ContractError::Unauthorized);
         }
 
         if did_doc.has_service(&service.id) {
@@ -184,8 +184,8 @@ impl DidContract {
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.has_controller(&sender) {
-            return Err(ContractError::DidDocumentWrongOwner);
+        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+            return Err(ContractError::Unauthorized);
         }
 
         if !did_doc.has_service(&service_did) {
@@ -217,13 +217,13 @@ impl DidContract {
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
         
-        if did_doc.has_controller(&sender) {
+        if did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
             // If sender is the controller, remove the DID document
             self.did_docs.remove(ctx.deps.storage, did);
             Ok(Response::default()) // TODO add some informations
         } else {
             // Return an error if the sender is not the controller
-            Err(ContractError::DidDocumentWrongOwner)
+            Err(ContractError::Unauthorized)
         }
     }
     
@@ -523,7 +523,7 @@ mod tests {
 
         let result = contract.delete_did_document(did.to_string()).call(&wrong_owner_addr);
         assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!("Did document - wrong owner", result.err().unwrap().to_string());
+        assert_eq!("Unauthorized", result.err().unwrap().to_string());
 
     }
 }

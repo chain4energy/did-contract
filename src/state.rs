@@ -20,37 +20,34 @@ pub struct DidDocument {
 }
 
 impl DidDocument {
-    pub fn has_controller(&self, did: &str) -> bool {
-        self.controller.contains(&did.to_string())
-    }
-}
-
-impl DidDocument {
     pub fn has_service(&self, service_did: &Did) -> bool {
         self.service.iter().any(|service| &service.id == service_did)
     }
 
-    // TODO make not public for axternal crate
-    pub fn is_controller(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: String) -> Result<bool, ContractError> {
-        let mut alreadyChecked: HashSet<String> = HashSet::new();
-        self.is_controller_internal(store, did_docs, controller, &mut alreadyChecked)
+    pub fn has_controller(&self, did: &str) -> bool {
+        self.controller.contains(&did.to_string())
     }
 
-    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: String, alreadyChecked: &mut HashSet<String>)  -> Result<bool, ContractError> {
+    // TODO make not public for axternal crate
+    pub fn is_controller(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &str) -> Result<bool, ContractError> {
+        let mut already_checked: HashSet<String> = HashSet::new();
+        self.is_controller_internal(store, did_docs, controller, &mut already_checked)
+    }
+
+    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &str, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
         for c in &self.controller {
             println!("did: {}, controller: {}, external_controller: {}", self.id.to_string(), c, &controller);
-            let cc = controller.clone();
-            if *c == cc {
-                println!("controller: {} == external_controller: {}", c, &cc);
+            if *c == controller {
+                println!("controller: {} == external_controller: {}", c, controller);
                 return Ok(true);
             }
             if Did::is_did(c) {
                 println!("controller: {} is did", c);
-                if alreadyChecked.insert(c.to_string()) {
+                if already_checked.insert(c.to_string()) {
                     let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
                     match did_doc_result {
                         Ok(did_document) => {
-                            let is_controller = did_document.is_controller_internal(store, did_docs, cc, alreadyChecked)?;
+                            let is_controller = did_document.is_controller_internal(store, did_docs, controller, already_checked)?;
                             if is_controller {
                                 return Ok(true);
                             }

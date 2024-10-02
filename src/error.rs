@@ -15,8 +15,8 @@ pub enum ContractError {
     #[error("Did document already exists")]
     DidDocumentAlreadyExists,
 
-    #[error("Did document - wrong owner")]
-    DidDocumentWrongOwner,
+    #[error("Unauthorized")]
+    Unauthorized,
 
     #[error("Did document controller already existsr")]
     DidDocumentControllerAlreadyExists,
