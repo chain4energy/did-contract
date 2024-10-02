@@ -1,7 +1,8 @@
+use core::fmt;
 use std::collections::HashSet;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{StdError, Storage};
+use cosmwasm_std::{Api, StdError, Storage};
 use cw_storage_plus::Map;
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
@@ -15,7 +16,7 @@ const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 #[cw_serde]
 pub struct DidDocument {
     pub id: Did,
-    pub controller: Vec<String>,
+    pub controller: Vec<Controller>,
     pub service: Vec<Service>,
 }
 
@@ -24,25 +25,25 @@ impl DidDocument {
         self.service.iter().any(|service| &service.id == service_did)
     }
 
-    pub fn has_controller(&self, did: &str) -> bool {
-        self.controller.contains(&did.to_string())
+    pub fn has_controller(&self, controller: &Controller) -> bool {
+        self.controller.contains(controller)
     }
 
     // TODO make not public for axternal crate
-    pub fn is_controller(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &str) -> Result<bool, ContractError> {
+    pub fn is_controlled_by(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<bool, ContractError> {
         let mut already_checked: HashSet<String> = HashSet::new();
         self.is_controller_internal(store, did_docs, controller, &mut already_checked)
     }
 
-    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &str, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
+    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
         for c in &self.controller {
-            println!("did: {}, controller: {}, external_controller: {}", self.id.to_string(), c, &controller);
-            if *c == controller {
-                println!("controller: {} == external_controller: {}", c, controller);
+            // println!("did: {}, controller: {}, external_controller: {}", self.id.to_string(), c, &controller);
+            if c == controller {
+                // println!("controller: {} == external_controller: {}", c, controller);
                 return Ok(true);
             }
-            if Did::is_did(c) {
-                println!("controller: {} is did", c);
+            if c.is_did() {
+                // println!("controller: {} is did", c);
                 if already_checked.insert(c.to_string()) {
                     let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
                     match did_doc_result {
@@ -105,10 +106,24 @@ impl<'de> Deserialize<'de> for Did {
     }
 }
 
-impl ToString for Did {
-    #[inline]
-    fn to_string(&self) -> String {
-        self.0.clone()
+// impl ToString for Did {
+//     #[inline]
+//     fn to_string(&self) -> String {
+//         self.0.clone()
+//     }
+// }
+
+impl From<String> for Did { // TODO maybe change to TryFrom<String>
+    fn from(s: String) -> Self {
+        Did::new(&s)
+    }
+}
+
+// Implement Display to allow conversion from MyStruct to String (automatically implements ToString)
+impl fmt::Display for Did {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0.as_str())
+        // write!(f, "{}", self.content)
     }
 }
 
@@ -141,22 +156,99 @@ impl Did {
         Did(id)
     }
 
-    // fn validate(&self) -> bool {
-    //     !self.0.is_empty() // Simple validation
-    // }
-
     pub fn value(&self) -> &str {
         &self.0
     }
 
-    pub fn is_did_prefixed(&self) -> bool {
-        let s = &self.0;
-        s.starts_with(DID_PREFIX)
+    pub fn validate(&self) -> bool {
+        Did::is_did(&self.0)
     }
 
     pub fn is_did(s: &str) -> bool {
         s.starts_with(DID_PREFIX)
     }
+}
+
+
+#[derive(PartialEq, Debug, Clone, JsonSchema)]
+pub struct Controller(String);
+
+impl Serialize for Controller {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer
+    {
+        serializer.serialize_str(&self.0)
+    }
+}
+
+impl<'de> Deserialize<'de> for Controller {
+    fn deserialize<D>(deserializer: D) -> Result<Controller, D::Error>
+    where
+        D: Deserializer<'de>
+    {
+        let s = String::deserialize(deserializer)?;
+        Ok(Controller(s))
+    }
+}
+
+// impl ToString for Controller {
+//     #[inline]
+//     fn to_string(&self) -> String {
+//         self.0.clone()
+//     }
+// }
+
+impl PartialEq<String> for &Controller {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Controller> for String {
+    fn eq(&self, other: &Controller) -> bool {
+        *self == other.0
+    }
+}
+
+impl From<String> for Controller {  // TODO maybe change to TryFrom<String>
+    fn from(s: String) -> Self {
+        Controller::new(&s)
+    }
+}
+
+// Implement Display to allow conversion from MyStruct to String (automatically implements ToString)
+impl fmt::Display for Controller {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.0.as_str())
+        // write!(f, "{}", self.content)
+    }
+}
+
+impl Controller {
+    pub fn new(s: &str) -> Self {
+        Controller(s.to_string())
+    }
+
+    pub fn value(&self) -> &str {
+        &self.0
+    }
+
+    pub fn validate(&self, api: &dyn Api) -> bool {
+        Controller::is_controller(api, &self.0)
+    }
+
+    pub fn is_did(&self) -> bool {
+        Did::is_did(&self.0)
+    }
+
+    pub fn is_controller(api: &dyn Api, s: &str) -> bool {
+        if let Err(_) = api.addr_validate(s) {
+            return Did::is_did(s)
+        }
+        true
+    }
+
 }
 
 #[cfg(test)]
@@ -242,7 +334,7 @@ mod tests {
         };
         let did = DidDocument {
             id: Did::new("did1"),
-            controller: vec!["controller1".to_string()],
+            controller: vec![Controller::new("controller1")],
             service: vec![service1, service2],
         };
 
@@ -273,7 +365,7 @@ mod tests {
         // Deserialize back to struct
         let deserialized: DidDocument = from_str(&serialized).unwrap();
         assert_eq!(deserialized.id, Did::new("did1"));
-        assert_eq!(deserialized.controller, vec![Did::new("controller1")]);
+        assert_eq!(deserialized.controller, vec![Controller::new("controller1")]);
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));
         assert_eq!(deserialized.service[0].a_type, "ServiceType1");

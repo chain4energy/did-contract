@@ -4,7 +4,7 @@ use cw_storage_plus::Map;
 use sylvia::{contract, entry_points};
 use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
 use crate::error::ContractError;
-use crate::state::{DidDocument, Service};
+use crate::state::{Controller, DidDocument, Service};
 use crate::state::Did;
 pub struct DidContract {
     pub did_docs: Map<String, DidDocument>,
@@ -38,10 +38,10 @@ impl DidContract {
     }
 
     #[sv::msg(query)]
-    pub fn is_did_controller(&self, ctx: QueryCtx, did: String, controller: String) -> Result<bool, ContractError> {
+    pub fn is_did_controller(&self, ctx: QueryCtx, did: String, controller: Controller) -> Result<bool, ContractError> {
         let did_doc_result: Result<DidDocument, StdError> = self.did_docs.load(ctx.deps.storage, did);
         match did_doc_result {
-            Ok(did_document) => did_document.is_controller(ctx.deps.storage, &self.did_docs, &controller),
+            Ok(did_document) => did_document.is_controlled_by(ctx.deps.storage, &self.did_docs, &controller),
             Err(e) => match e {
                 StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
                 _ => Err(ContractError::DidDocumentError(e)),
@@ -50,7 +50,7 @@ impl DidContract {
     }
 
 
-
+    // TODO add DID and Controller validation in all methods
     #[sv::msg(exec)]
     pub fn create_did_document(&self, ctx: ExecCtx, did_doc: DidDocument) -> Result<Response, ContractError> {
         if self.did_docs.has(ctx.deps.storage, did_doc.id.value().to_string()) {
@@ -74,9 +74,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             return Err(ContractError::Unauthorized);
         }
 
@@ -88,7 +88,7 @@ impl DidContract {
     }
 
     #[sv::msg(exec)]
-    pub fn add_controller(&self, ctx: ExecCtx, did: String, controller: String) -> Result<Response, ContractError> {
+    pub fn add_controller(&self, ctx: ExecCtx, did: String, controller: Controller) -> Result<Response, ContractError> {
         let did_doc = self.did_docs.load(ctx.deps.storage, did);
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
@@ -97,9 +97,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             return Err(ContractError::Unauthorized);
         }
 
@@ -117,7 +117,7 @@ impl DidContract {
     }
 
     #[sv::msg(exec)]
-    pub fn delete_controller(&self, ctx: ExecCtx, did: String, controller: String) -> Result<Response, ContractError> {
+    pub fn delete_controller(&self, ctx: ExecCtx, did: String, controller: Controller) -> Result<Response, ContractError> {
         let did_doc = self.did_docs.load(ctx.deps.storage, did);
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
@@ -126,9 +126,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             return Err(ContractError::Unauthorized);
         }
 
@@ -154,9 +154,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             return Err(ContractError::Unauthorized);
         }
 
@@ -182,9 +182,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             return Err(ContractError::Unauthorized);
         }
 
@@ -214,10 +214,10 @@ impl DidContract {
         };
 
         // Ensure the sender is the controller
-        let sender = ctx.info.sender.to_string(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
         // let sender = Did::new_address(sender.as_str());
         
-        if did_doc.is_controller(ctx.deps.storage, &self.did_docs, &sender)? {
+        if did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
             // If sender is the controller, remove the DID document
             self.did_docs.remove(ctx.deps.storage, did);
             Ok(Response::default()) // TODO add some informations
@@ -264,7 +264,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![owner.to_string()],
+            controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -291,7 +291,7 @@ mod tests {
         let did_simple = "didc4e:c4e:did_simple";
         let did_doc_simple = DidDocument{
             id: Did::new(did_simple),
-            controller: vec![owner.to_string()],
+            controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -302,22 +302,22 @@ mod tests {
         let result = contract.create_did_document(did_doc_simple.clone()).call(&owner);
         assert!(result.is_ok(), "Expected Ok, but got an Err");
 
-        let is_controller = contract.is_did_controller(did_simple.to_string(), owner.to_string());
+        let is_controller = contract.is_did_controller(did_simple.to_string(), owner.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
-        let is_controller = contract.is_did_controller(did_simple.to_string(), "unknown".to_string());
+        let is_controller = contract.is_did_controller(did_simple.to_string(), "unknown".to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(!is_controller.unwrap(), "Expected false, but got true");
 
-        let is_controller = contract.is_did_controller(did_simple.to_string(), "didc4e:c4e:unknown".to_string());
+        let is_controller = contract.is_did_controller(did_simple.to_string(), "didc4e:c4e:unknown".to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(!is_controller.unwrap(), "Expected false, but got true");
 
         let did_controlled_by_itself = "didc4e:c4e:did_controlled_by_himself";
         let did_doc_controlled_by_itself = DidDocument{
             id: Did::new(did_controlled_by_itself),
-            controller: vec![did_controlled_by_itself.to_string()],
+            controller: vec![did_controlled_by_itself.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -328,11 +328,11 @@ mod tests {
         let result = contract.create_did_document(did_doc_controlled_by_itself.clone()).call(&owner);
         assert!(result.is_ok(), "Expected Ok, but got an Err");
 
-        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), did_controlled_by_itself.to_string());
+        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), did_controlled_by_itself.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
-        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), "didc4e:c4e:unknown".to_string());
+        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), "didc4e:c4e:unknown".to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(!is_controller.unwrap(), "Expected false, but got true");
         
@@ -340,7 +340,7 @@ mod tests {
         let did_looped_2 = "didc4e:c4e:did_looped_2";
         let did_doc_looped_1 = DidDocument{
             id: Did::new(did_looped_1),
-            controller: vec![did_looped_2.to_string()],
+            controller: vec![did_looped_2.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -350,7 +350,7 @@ mod tests {
 
         let did_doc_looped_2 = DidDocument{
             id: Did::new(did_looped_2),
-            controller: vec![did_looped_1.to_string()],
+            controller: vec![did_looped_1.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -364,22 +364,22 @@ mod tests {
         let result = contract.create_did_document(did_doc_looped_2.clone()).call(&owner);
         assert!(result.is_ok(), "Expected Ok, but got an Err");
 
-        let is_controller = contract.is_did_controller(did_looped_1.to_string(), "didc4e:c4e:unknown".to_string());
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), "didc4e:c4e:unknown".to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(!is_controller.unwrap(), "Expected false, but got true");
 
-        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_2.to_string());
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_2.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
-        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_1.to_string());
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_1.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
         let did_controlled_by_simple = "didc4e:c4e:did_controlled_by_simple";
         let did_doc_controlled_by_simple = DidDocument{
             id: Did::new(did_controlled_by_simple),
-            controller: vec![did_simple.to_string()],
+            controller: vec![did_simple.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -390,15 +390,15 @@ mod tests {
         let result = contract.create_did_document(did_doc_controlled_by_simple.clone()).call(&owner);
         assert!(result.is_ok(), "Expected Ok, but got an Err");
 
-        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), "didc4e:c4e:unknown".to_string());
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), "didc4e:c4e:unknown".to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(!is_controller.unwrap(), "Expected false, but got true");
 
-        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), did_simple.to_string());
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), did_simple.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
-        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), owner.to_string());
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), owner.to_string().into());
         assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
         assert!(is_controller.unwrap(), "Expected true, but got false");
 
@@ -417,7 +417,7 @@ mod tests {
         let did = "new_did";
         let mut new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![owner.to_string()],
+            controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -429,7 +429,7 @@ mod tests {
 
         new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![owner.to_string()],
+            controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("AAAA"),
@@ -472,7 +472,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![owner_addr.to_string()],
+            controller: vec![owner_addr.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -508,7 +508,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![owner_addr.to_string()],
+            controller: vec![owner_addr.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),

@@ -43,7 +43,7 @@ fn create_did_document() {
 
     let did_doc = DidDocument { 
         id: crate::state::Did::new(did), 
-        controller: vec!["did:user:000131".to_string()], 
+        controller: vec!["did:user:000131".to_string().into()], 
         service: vec![crate::state::Service{
             id: crate::state::Did::new("did:service:000131"),
             a_type: "Chargera".to_string(),
