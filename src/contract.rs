@@ -7,7 +7,7 @@ use crate::error::ContractError;
 use crate::state::{DidDocument, Service};
 use crate::state::Did;
 pub struct DidContract {
-    pub(crate) did_docs: Map<String, DidDocument>,
+    pub did_docs: Map<String, DidDocument>,
 }
 
 #[entry_points]
@@ -75,7 +75,7 @@ impl DidContract {
             },
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         if !did_doc.has_controller(&sender) {
             return Err(ContractError::DidDocumentWrongOwner);
         }
@@ -88,7 +88,7 @@ impl DidContract {
     }
 
     #[sv::msg(exec)]
-    pub fn add_controller(&self, ctx: ExecCtx, did: String, controller: Did) -> Result<Response, ContractError> {
+    pub fn add_controller(&self, ctx: ExecCtx, did: String, controller: String) -> Result<Response, ContractError> {
         let did_doc = self.did_docs.load(ctx.deps.storage, did);
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
@@ -98,7 +98,7 @@ impl DidContract {
             },
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         if !did_doc.has_controller(&sender) {
             return Err(ContractError::DidDocumentWrongOwner);
         }
@@ -117,7 +117,7 @@ impl DidContract {
     }
 
     #[sv::msg(exec)]
-    pub fn delete_controller(&self, ctx: ExecCtx, did: String, controller: Did) -> Result<Response, ContractError> {
+    pub fn delete_controller(&self, ctx: ExecCtx, did: String, controller: String) -> Result<Response, ContractError> {
         let did_doc = self.did_docs.load(ctx.deps.storage, did);
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
@@ -127,7 +127,7 @@ impl DidContract {
             },
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         if !did_doc.has_controller(&sender) {
             return Err(ContractError::DidDocumentWrongOwner);
         }
@@ -155,7 +155,7 @@ impl DidContract {
             },
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         if !did_doc.has_controller(&sender) {
             return Err(ContractError::DidDocumentWrongOwner);
         }
@@ -183,7 +183,7 @@ impl DidContract {
             },
         };
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         if !did_doc.has_controller(&sender) {
             return Err(ContractError::DidDocumentWrongOwner);
         }
@@ -215,7 +215,7 @@ impl DidContract {
 
         // Ensure the sender is the controller
         let sender = ctx.info.sender.to_string(); // Get sender's address as a string
-        let sender = Did::new_address(sender.as_str());
+        // let sender = Did::new_address(sender.as_str());
         
         if did_doc.has_controller(&sender) {
             // If sender is the controller, remove the DID document
@@ -264,7 +264,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![Did::new(owner.as_str())],
+            controller: vec![owner.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -291,7 +291,7 @@ mod tests {
         let did_simple = "didc4e:c4e:did_simple";
         let did_doc_simple = DidDocument{
             id: Did::new(did_simple),
-            controller: vec![Did::new(owner.as_str())],
+            controller: vec![owner.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -317,7 +317,7 @@ mod tests {
         let did_controlled_by_itself = "didc4e:c4e:did_controlled_by_himself";
         let did_doc_controlled_by_itself = DidDocument{
             id: Did::new(did_controlled_by_itself),
-            controller: vec![Did::new(did_controlled_by_itself)],
+            controller: vec![did_controlled_by_itself.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -340,7 +340,7 @@ mod tests {
         let did_looped_2 = "didc4e:c4e:did_looped_2";
         let did_doc_looped_1 = DidDocument{
             id: Did::new(did_looped_1),
-            controller: vec![Did::new(did_looped_2)],
+            controller: vec![did_looped_2.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -350,7 +350,7 @@ mod tests {
 
         let did_doc_looped_2 = DidDocument{
             id: Did::new(did_looped_2),
-            controller: vec![Did::new(did_looped_1)],
+            controller: vec![did_looped_1.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -379,7 +379,7 @@ mod tests {
         let did_controlled_by_simple = "didc4e:c4e:did_controlled_by_simple";
         let did_doc_controlled_by_simple = DidDocument{
             id: Did::new(did_controlled_by_simple),
-            controller: vec![Did::new(did_simple)],
+            controller: vec![did_simple.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -417,7 +417,7 @@ mod tests {
         let did = "new_did";
         let mut new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![Did::new(owner.as_str())],
+            controller: vec![owner.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -429,7 +429,7 @@ mod tests {
 
         new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![Did::new(owner.as_str())],
+            controller: vec![owner.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("AAAA"),
@@ -472,7 +472,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![Did::new_address(owner_addr.as_str())],
+            controller: vec![owner_addr.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -508,7 +508,7 @@ mod tests {
         let did = "new_did";
         let new_did_doc = DidDocument{
             id: Did::new(did),
-            controller: vec![Did::new_address(owner_addr.as_str())],
+            controller: vec![owner_addr.to_string()],
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),

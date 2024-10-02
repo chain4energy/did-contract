@@ -15,13 +15,13 @@ const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 #[cw_serde]
 pub struct DidDocument {
     pub id: Did,
-    pub controller: Vec<Did>,
+    pub controller: Vec<String>,
     pub service: Vec<Service>,
 }
 
 impl DidDocument {
-    pub fn has_controller(&self, did: &Did) -> bool {
-        self.controller.contains(did)
+    pub fn has_controller(&self, did: &str) -> bool {
+        self.controller.contains(&did.to_string())
     }
 }
 
@@ -38,11 +38,14 @@ impl DidDocument {
 
     fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: String, alreadyChecked: &mut HashSet<String>)  -> Result<bool, ContractError> {
         for c in &self.controller {
+            println!("did: {}, controller: {}, external_controller: {}", self.id.to_string(), c, &controller);
             let cc = controller.clone();
-            if c == cc {
+            if *c == cc {
+                println!("controller: {} == external_controller: {}", c, &cc);
                 return Ok(true);
             }
-            if c.has_did_prefix() {
+            if Did::is_did(c) {
+                println!("controller: {} is did", c);
                 if alreadyChecked.insert(c.to_string()) {
                     let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
                     match did_doc_result {
@@ -112,13 +115,6 @@ impl ToString for Did {
     }
 }
 
-impl Did {
-    #[inline]
-    fn has_did_prefix(&self) -> bool {
-        self.0.starts_with(DID_PREFIX)
-    }
-}
-
 impl PartialEq<String> for &Did {
     fn eq(&self, other: &String) -> bool {
         self.0 == *other
@@ -156,9 +152,13 @@ impl Did {
         &self.0
     }
 
-    pub fn is_addreas(&self) -> bool {
+    pub fn is_did_prefixed(&self) -> bool {
         let s = &self.0;
-        return s.starts_with(ADDRESS_DID_PREFIX)
+        s.starts_with(DID_PREFIX)
+    }
+
+    pub fn is_did(s: &str) -> bool {
+        s.starts_with(DID_PREFIX)
     }
 }
 
@@ -245,7 +245,7 @@ mod tests {
         };
         let did = DidDocument {
             id: Did::new("did1"),
-            controller: vec![Did::new("controller1")],
+            controller: vec!["controller1".to_string()],
             service: vec![service1, service2],
         };
 
