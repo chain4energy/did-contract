@@ -27,9 +27,6 @@ impl DidContract {
 
     #[sv::msg(query)]
     pub fn get_did_document(&self, ctx: QueryCtx, did: String) -> Result<DidDocument, ContractError> {
-        // Load and return the current value of the counter
-        self.did_docs.has(ctx.deps.storage, did.clone());
-
         let did_doc_result = self.did_docs.load(ctx.deps.storage, did);
         match did_doc_result {
             Ok(did_document) => Ok(did_document),
@@ -39,6 +36,20 @@ impl DidContract {
             },
         }
     }
+
+    #[sv::msg(query)]
+    pub fn is_did_controller(&self, ctx: QueryCtx, did: String, controller: String) -> Result<bool, ContractError> {
+        let did_doc_result: Result<DidDocument, StdError> = self.did_docs.load(ctx.deps.storage, did);
+        match did_doc_result {
+            Ok(did_document) => did_document.is_controller(ctx.deps.storage, &self.did_docs, controller),
+            Err(e) => match e {
+                StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
+                _ => Err(ContractError::DidDocumentError(e)),
+            },
+        }
+    }
+
+
 
     #[sv::msg(exec)]
     pub fn create_did_document(&self, ctx: ExecCtx, did_doc: DidDocument) -> Result<Response, ContractError> {
@@ -265,6 +276,132 @@ mod tests {
 
         let did_document = contract.get_did_document(did.to_string()).unwrap();
         assert_eq!(new_did_doc.clone(), did_document.clone());
+    }
+
+    #[test]
+    fn is_did_controller() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+    
+        let owner = "owner".into_addr();
+    
+        let contract = code_id.instantiate().call(&owner).unwrap();
+    
+        // let did_owner = "did_owner";
+        let did_simple = "didc4e:c4e:did_simple";
+        let did_doc_simple = DidDocument{
+            id: Did::new(did_simple),
+            controller: vec![Did::new(owner.as_str())],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+        
+        let result = contract.create_did_document(did_doc_simple.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let is_controller = contract.is_did_controller(did_simple.to_string(), owner.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
+        let is_controller = contract.is_did_controller(did_simple.to_string(), "unknown".to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(!is_controller.unwrap(), "Expected false, but got true");
+
+        let is_controller = contract.is_did_controller(did_simple.to_string(), "didc4e:c4e:unknown".to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(!is_controller.unwrap(), "Expected false, but got true");
+
+        let did_controlled_by_itself = "didc4e:c4e:did_controlled_by_himself";
+        let did_doc_controlled_by_itself = DidDocument{
+            id: Did::new(did_controlled_by_itself),
+            controller: vec![Did::new(did_controlled_by_itself)],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let result = contract.create_did_document(did_doc_controlled_by_itself.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), did_controlled_by_itself.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
+        let is_controller = contract.is_did_controller(did_controlled_by_itself.to_string(), "didc4e:c4e:unknown".to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(!is_controller.unwrap(), "Expected false, but got true");
+        
+        let did_looped_1 = "didc4e:c4e:did_looped_1";
+        let did_looped_2 = "didc4e:c4e:did_looped_2";
+        let did_doc_looped_1 = DidDocument{
+            id: Did::new(did_looped_1),
+            controller: vec![Did::new(did_looped_2)],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let did_doc_looped_2 = DidDocument{
+            id: Did::new(did_looped_2),
+            controller: vec![Did::new(did_looped_1)],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let result = contract.create_did_document(did_doc_looped_1.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let result = contract.create_did_document(did_doc_looped_2.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), "didc4e:c4e:unknown".to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(!is_controller.unwrap(), "Expected false, but got true");
+
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_2.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
+        let is_controller = contract.is_did_controller(did_looped_1.to_string(), did_looped_1.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
+        let did_controlled_by_simple = "didc4e:c4e:did_controlled_by_simple";
+        let did_doc_controlled_by_simple = DidDocument{
+            id: Did::new(did_controlled_by_simple),
+            controller: vec![Did::new(did_simple)],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let result = contract.create_did_document(did_doc_controlled_by_simple.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), "didc4e:c4e:unknown".to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(!is_controller.unwrap(), "Expected false, but got true");
+
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), did_simple.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
+        let is_controller = contract.is_did_controller(did_controlled_by_simple.to_string(), owner.to_string());
+        assert!(is_controller.is_ok(), "Expected Ok, but got an Err");
+        assert!(is_controller.unwrap(), "Expected true, but got false");
+
     }
 
     #[test]

@@ -3,9 +3,8 @@
 // };
 
 pub mod contract;
-mod msg;
-mod state;
-mod error;
+pub mod state;
+pub mod error;
 
 #[cfg(test)]
 mod e2e_test;

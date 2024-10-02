@@ -1,9 +1,15 @@
+use std::collections::HashSet;
+
 use cosmwasm_schema::cw_serde;
+use cosmwasm_std::{StdError, Storage};
+use cw_storage_plus::Map;
 use schemars::JsonSchema;
 use serde::{Serialize, Serializer, Deserialize, Deserializer};
 use constcat::concat as constcat;
 
-const DID_PREFIX: &str = "c4e:did:c4e:";
+use crate::error::ContractError;
+
+const DID_PREFIX: &str = "didc4e:c4e:"; // TODO make configurable on contract instatiating
 const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 
 #[cw_serde]
@@ -22,6 +28,41 @@ impl DidDocument {
 impl DidDocument {
     pub fn has_service(&self, service_did: &Did) -> bool {
         self.service.iter().any(|service| &service.id == service_did)
+    }
+
+    // TODO make not public for axternal crate
+    pub fn is_controller(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: String) -> Result<bool, ContractError> {
+        let mut alreadyChecked: HashSet<String> = HashSet::new();
+        self.is_controller_internal(store, did_docs, controller, &mut alreadyChecked)
+    }
+
+    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: String, alreadyChecked: &mut HashSet<String>)  -> Result<bool, ContractError> {
+        for c in &self.controller {
+            let cc = controller.clone();
+            if c == cc {
+                return Ok(true);
+            }
+            if c.has_did_prefix() {
+                if alreadyChecked.insert(c.to_string()) {
+                    let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
+                    match did_doc_result {
+                        Ok(did_document) => {
+                            let is_controller = did_document.is_controller_internal(store, did_docs, cc, alreadyChecked)?;
+                            if is_controller {
+                                return Ok(true);
+                            }
+                        },
+                        Err(e) => match e {
+                            StdError::NotFound{ .. } => (),
+                            _ => {
+                                return Err(ContractError::DidDocumentError(e));
+                            },
+                        },
+                    }
+                }
+            }
+        }
+        Ok(false)
     }
 }
 
@@ -68,6 +109,25 @@ impl ToString for Did {
     #[inline]
     fn to_string(&self) -> String {
         self.0.clone()
+    }
+}
+
+impl Did {
+    #[inline]
+    fn has_did_prefix(&self) -> bool {
+        self.0.starts_with(DID_PREFIX)
+    }
+}
+
+impl PartialEq<String> for &Did {
+    fn eq(&self, other: &String) -> bool {
+        self.0 == *other
+    }
+}
+
+impl PartialEq<Did> for String {
+    fn eq(&self, other: &Did) -> bool {
+        *self == other.0
     }
 }
 
