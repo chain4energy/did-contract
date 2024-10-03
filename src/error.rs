@@ -6,8 +6,17 @@ pub enum ContractError {
     #[error("{0}")]
     Std(#[from] StdError),
 
+    #[error("Did format error")]
+    DidFormatError(),
+
+    #[error("Controller format error")]
+    ControllerFormatError(),
+
     #[error("Did document not found")]
     DidDocumentNotFound(StdError),
+
+    #[error("Did document has no controller")]
+    DidDocumentNoController(),
 
     #[error("Did document error")]
     DidDocumentError(StdError),

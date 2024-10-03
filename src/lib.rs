@@ -5,6 +5,7 @@
 pub mod contract;
 pub mod state;
 pub mod error;
+mod multiset;
 
 #[cfg(test)]
 mod e2e_test;

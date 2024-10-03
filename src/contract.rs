@@ -1,13 +1,15 @@
-use cosmwasm_std::{Response, StdError, StdResult};
+use cosmwasm_std::{Deps, Order, Response, StdError, StdResult, Storage};
 // use cw_storage_plus::Item;
-use cw_storage_plus::Map;
+use cw_storage_plus::{Bound, Deque, Map};
 use sylvia::{contract, entry_points};
 use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
 use crate::error::ContractError;
+use crate::multiset::MultiSet;
 use crate::state::{Controller, DidDocument, Service};
 use crate::state::Did;
 pub struct DidContract {
     pub did_docs: Map<String, DidDocument>,
+    pub controllers: MultiSet, // TODO optimize indexing on controllers
 }
 
 #[entry_points]
@@ -17,6 +19,7 @@ impl DidContract {
     pub const fn new() -> Self {
         Self {
             did_docs: Map::new("dids"),
+            controllers: MultiSet::new("controllers"),
         }
     }
 
@@ -26,46 +29,68 @@ impl DidContract {
     }
 
     #[sv::msg(query)]
-    pub fn get_did_document(&self, ctx: QueryCtx, did: String) -> Result<DidDocument, ContractError> {
-        let did_doc_result = self.did_docs.load(ctx.deps.storage, did);
-        match did_doc_result {
-            Ok(did_document) => Ok(did_document),
-            Err(e) => match e {
-                StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
-                _ => Err(ContractError::DidDocumentError(e)),
-            },
-        }
+    pub fn get_did_document(&self, ctx: QueryCtx, did: Did) -> Result<DidDocument, ContractError> {
+        did.ensure_valid()?;
+        self.get_did_doc(ctx.deps.storage, &did.to_string())
+    }
+
+
+    #[sv::msg(query)]
+    pub fn is_did_controller(&self, ctx: QueryCtx, did: Did, controller: Controller) -> Result<bool, ContractError> {
+        did.ensure_valid()?;
+        controller.ensure_valid(ctx.deps.api)?;
+        let doc = self.get_did_doc(ctx.deps.storage, did.value())?;
+        doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &controller)
     }
 
     #[sv::msg(query)]
-    pub fn is_did_controller(&self, ctx: QueryCtx, did: String, controller: Controller) -> Result<bool, ContractError> {
-        let did_doc_result: Result<DidDocument, StdError> = self.did_docs.load(ctx.deps.storage, did);
-        match did_doc_result {
-            Ok(did_document) => did_document.is_controlled_by(ctx.deps.storage, &self.did_docs, &controller),
-            Err(e) => match e {
-                StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
-                _ => Err(ContractError::DidDocumentError(e)),
-            },
-        }
+    pub fn get_controlled_dids(&self, ctx: QueryCtx, controller: Controller, limit: Option<usize>, start_after: Option<String>) -> Result<Vec<Did>, ContractError> {
+        controller.ensure_valid(ctx.deps.api)?;
+        let res = self.get_controlled_dids_strings(ctx.deps, controller.value(), limit, start_after)?;
+        let dids = res
+                    .into_iter()
+                    .map(|s| Did::new(&s))
+                    .collect();
+        Ok(dids)
     }
 
+    #[sv::msg(query)]
+    pub fn get_controlled_did_documents(&self, ctx: QueryCtx, controller: Controller, limit: Option<usize>, start_after: Option<String>) -> Result<Vec<DidDocument>, ContractError> {
+        controller.ensure_valid(ctx.deps.api)?;
+        let res = self.get_controlled_dids_strings(ctx.deps, controller.value(), limit, start_after)?;
+        let mut docs: Vec<DidDocument> =  Vec::new();
+        for did in &res {
+            let doc = self.get_did_doc(ctx.deps.storage, did)?;
+            docs.push(doc);
+        }
+        Ok(docs)
+    }
 
-    // TODO add DID and Controller validation in all methods
     #[sv::msg(exec)]
     pub fn create_did_document(&self, ctx: ExecCtx, did_doc: DidDocument) -> Result<Response, ContractError> {
+        did_doc.ensure_valid(ctx.deps.api)?;
         if self.did_docs.has(ctx.deps.storage, did_doc.id.value().to_string()) {
             return Err(ContractError::DidDocumentAlreadyExists);
         }
+        let mut new_doc = did_doc;
+        if !new_doc.has_any_controller() {
+            new_doc.controller.push(Controller::new(&ctx.info.sender.to_string()));
+        }
 
-        let r = self.did_docs.save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
+        let r = self.did_docs.save(ctx.deps.storage, new_doc.id.to_string(), &new_doc);
         match r {
-            Ok(_) => Ok(Response::default()),
+            Ok(_) => {
+                self.index_controllers(ctx.deps.storage, &new_doc)?;
+                Ok(Response::default())
+            },
             Err(e) => Err(ContractError::DidDocumentError(e))
         }
     }
 
     #[sv::msg(exec)]
     pub fn update_did_document(&self, ctx: ExecCtx, new_did_doc: DidDocument) -> Result<Response, ContractError> {
+        new_did_doc.ensure_valid(ctx.deps.api)?;
+        new_did_doc.ensure_controller()?;
         let did_doc = self.did_docs.load(ctx.deps.storage, new_did_doc.id.to_string());
         let did_doc = match did_doc {
             Ok(did_document) => did_document,
@@ -75,21 +100,24 @@ impl DidContract {
             },
         };
         let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            return Err(ContractError::Unauthorized);
-        }
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         let r = self.did_docs.save(ctx.deps.storage, new_did_doc.id.to_string(), &new_did_doc);
         match r {
-            Ok(_) => Ok(Response::default()),
+            Ok(_) => {
+                self.unindex_controllers(ctx.deps.storage, &did_doc);
+                self.index_controllers(ctx.deps.storage, &new_did_doc)?;
+                Ok(Response::default())
+            },
             Err(e) => Err(ContractError::DidDocumentError(e))
         }
     }
 
     #[sv::msg(exec)]
-    pub fn add_controller(&self, ctx: ExecCtx, did: String, controller: Controller) -> Result<Response, ContractError> {
-        let did_doc = self.did_docs.load(ctx.deps.storage, did);
+    pub fn add_controller(&self, ctx: ExecCtx, did: Did, controller: Controller) -> Result<Response, ContractError> {
+        did.ensure_valid()?;
+        controller.ensure_valid(ctx.deps.api)?;
+        let did_doc = self.did_docs.load(ctx.deps.storage, did.to_string());
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
             Err(e) => return match e {
@@ -98,27 +126,29 @@ impl DidContract {
             },
         };
         let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            return Err(ContractError::Unauthorized);
-        }
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_controller(&controller) {
             return Err(ContractError::DidDocumentControllerAlreadyExists);
         }
 
-        did_doc.controller.push(controller);
+        did_doc.controller.push(controller.clone());
 
         let r = self.did_docs.save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
         match r {
-            Ok(_) => Ok(Response::default()),
+            Ok(_) => {
+                self.index_controller(ctx.deps.storage, &did, &controller)?;
+                Ok(Response::default())
+            },
             Err(e) => Err(ContractError::DidDocumentError(e))
         }
     }
 
     #[sv::msg(exec)]
-    pub fn delete_controller(&self, ctx: ExecCtx, did: String, controller: Controller) -> Result<Response, ContractError> {
-        let did_doc = self.did_docs.load(ctx.deps.storage, did);
+    pub fn delete_controller(&self, ctx: ExecCtx, did: Did, controller: Controller) -> Result<Response, ContractError> {
+        did.ensure_valid()?;
+        controller.ensure_valid(ctx.deps.api)?;
+        let did_doc = self.did_docs.load(ctx.deps.storage, did.to_string());
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
             Err(e) => return match e {
@@ -127,26 +157,29 @@ impl DidContract {
             },
         };
         let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            return Err(ContractError::Unauthorized);
-        }
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_controller(&controller) {
             return Err(ContractError::DidDocumentControllerNotExists);
         }
 
         did_doc.controller.retain(|s| *s != controller);
+        did_doc.ensure_controller()?;
 
         let r = self.did_docs.save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
         match r {
-            Ok(_) => Ok(Response::default()),
+            Ok(_) => {
+                self.unindex_controller(ctx.deps.storage, &did, &controller);
+                Ok(Response::default())
+            },
             Err(e) => Err(ContractError::DidDocumentError(e))
         }
     }
 
-    pub fn add_service(&self, ctx: ExecCtx, did: String, service: Service) -> Result<Response, ContractError> {
-        let did_doc = self.did_docs.load(ctx.deps.storage, did);
+    pub fn add_service(&self, ctx: ExecCtx, did: Did, service: Service) -> Result<Response, ContractError> {
+        did.ensure_valid()?;
+        service.ensure_valid()?;
+        let did_doc = self.did_docs.load(ctx.deps.storage, did.to_string());
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
             Err(e) => return match e {
@@ -154,11 +187,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            return Err(ContractError::Unauthorized);
-        }
+        
+        let sender: Controller = ctx.info.sender.to_string().into();
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_service(&service.id) {
             return Err(ContractError::DidDocumentServiceAlreadyExists);
@@ -173,8 +204,10 @@ impl DidContract {
         }
     }
 
-    pub fn delete_service(&self, ctx: ExecCtx, did: String, service_did: Did) -> Result<Response, ContractError> {
-        let did_doc = self.did_docs.load(ctx.deps.storage, did);
+    pub fn delete_service(&self, ctx: ExecCtx, did: Did, service_did: Did) -> Result<Response, ContractError> {
+        did.ensure_valid()?;
+        service_did.ensure_valid()?;
+        let did_doc = self.did_docs.load(ctx.deps.storage, did.to_string());
         let mut did_doc = match did_doc {
             Ok(did_document) => did_document,
             Err(e) => return match e {
@@ -182,11 +215,9 @@ impl DidContract {
                 _ => Err(ContractError::DidDocumentError(e)),
             },
         };
-        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        if !did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            return Err(ContractError::Unauthorized);
-        }
+
+        let sender: Controller = ctx.info.sender.to_string().into(); 
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_service(&service_did) {
             return Err(ContractError::DidDocumentServiceNotExists);
@@ -202,9 +233,11 @@ impl DidContract {
     }
 
     #[sv::msg(exec)]
-    pub fn delete_did_document(&self, ctx: ExecCtx, did: String) -> Result<Response, ContractError> {
+    pub fn delete_did_document(&self, ctx: ExecCtx, did: Did) -> Result<Response, ContractError> {
+        did.ensure_valid()?;
+
          // Load the DID document from storage
-        let did_doc = self.did_docs.load(ctx.deps.storage, (&did).clone());
+        let did_doc = self.did_docs.load(ctx.deps.storage, did.to_string());
         let did_doc = match did_doc {
             Ok(did_document) => did_document,
             Err(e) => return match e {
@@ -215,18 +248,75 @@ impl DidContract {
 
         // Ensure the sender is the controller
         let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
-        // let sender = Did::new_address(sender.as_str());
-        
-        if did_doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &sender)? {
-            // If sender is the controller, remove the DID document
-            self.did_docs.remove(ctx.deps.storage, did);
-            Ok(Response::default()) // TODO add some informations
-        } else {
-            // Return an error if the sender is not the controller
-            Err(ContractError::Unauthorized)
+
+        did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
+
+        self.did_docs.remove(ctx.deps.storage, did.to_string());
+        self.unindex_controllers(ctx.deps.storage, &did_doc);
+        Ok(Response::default())
+
+    }
+
+    
+    fn get_did_doc(&self, store: &dyn Storage, did: &str) -> Result<DidDocument, ContractError> {
+        let did_doc_result = self.did_docs.load(store, did.into());
+        match did_doc_result {
+            Ok(did_document) => Ok(did_document),
+            Err(e) => match e {
+                StdError::NotFound{ .. } => Err(ContractError::DidDocumentNotFound(e)),
+                _ => Err(ContractError::DidDocumentError(e)),
+            },
         }
     }
     
+    fn index_controllers(&self,store: &mut dyn Storage, did_doc: &DidDocument) -> Result<(), ContractError>{
+        for c in &did_doc.controller {
+            let r = self.controllers.save(store, &c.to_string(), &did_doc.id.to_string());
+            if let Err(e) = r {
+                return Err(ContractError::DidDocumentError(e));
+            }
+        }
+        Ok(())
+    }
+
+    fn unindex_controllers(&self,store: &mut dyn Storage, did_doc: &DidDocument) {
+        for c in &did_doc.controller {
+            self.controllers.remove(store, &c.to_string(), &did_doc.id.to_string());
+        }
+    }
+
+    fn index_controller(&self,store: &mut dyn Storage, did: &Did, controller: &Controller) -> Result<(), ContractError>{
+        let r = self.controllers.save(store, &controller.to_string(), &did.to_string());
+        if let Err(e) = r {
+            return Err(ContractError::DidDocumentError(e));
+        }
+        Ok(())
+    }
+
+    fn unindex_controller(&self,store: &mut dyn Storage, did: &Did, controller: &Controller) {
+        self.controllers.remove(store, &controller.to_string(), &did.to_string());
+    }
+
+    fn get_controlled_dids_strings(&self, deps: Deps, controller: &str, limit: Option<usize>, start_after: Option<String>) -> Result<Vec<String>, ContractError> {
+        const DEFAULT_LIMIT: usize = 50;
+        const MAX_LIMIT: usize = 200;
+        let mut limit = limit.unwrap_or(DEFAULT_LIMIT);
+        limit = {if limit == 0 { DEFAULT_LIMIT } else { limit }}.min(MAX_LIMIT) as usize;
+        
+        let start = start_after.map(Bound::exclusive);
+        
+        let res: Result<Vec<_>, _> = self.controllers.get_values(deps.storage, controller, start, None, Order::Ascending).take(limit).collect();
+        match res {
+            Ok(dids) => {
+                Ok(dids)
+            },
+            Err(e) => match e {
+                StdError::NotFound{ .. } => Err(ContractError::DidDocumentError(e)),
+                _ => Err(ContractError::DidDocumentError(e)),
+            },
+        }
+
+    }
 }
 
 #[cfg(test)]
@@ -276,6 +366,77 @@ mod tests {
 
         let did_document = contract.get_did_document(did.to_string()).unwrap();
         assert_eq!(new_did_doc.clone(), did_document.clone());
+    }
+
+    #[test]
+    fn get_controlled_dids() {
+        let app = App::default();
+        let code_id = CodeId::store_code(&app);
+    
+        let owner = "owner".into_addr();
+        let owner2 = "owner2".into_addr();
+
+        let contract = code_id.instantiate().call(&owner).unwrap();
+    
+        // let did_owner = "did_owner";
+        let did1 = "new_did11111111111111111111111111";
+        let new_did_doc = DidDocument{
+            id: Did::new(did1),
+            controller: vec![owner.to_string().into()],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+        let result = contract.create_did_document(new_did_doc.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let did2 = "new_did22222222222222222222222222";
+        let new_did_doc = DidDocument{
+            id: Did::new(did2),
+            controller: vec![owner.to_string().into()],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let result = contract.create_did_document(new_did_doc.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let did3 = "new_did333333333333333333333333333";
+        let new_did_doc = DidDocument{
+            id: Did::new(did3),
+            controller: vec![owner2.to_string().into()],
+            service: vec![Service{
+                a_type: "".to_string(),
+                id: Did::new("dfdsfs"),
+                service_endpoint: "dfdsfs".to_string()
+            }]
+        };
+
+        let result = contract.create_did_document(new_did_doc.clone()).call(&owner);
+        assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+        let dids = contract.get_controlled_dids(owner.to_string().into(), Some(1), None).unwrap();
+        for d in &dids {
+            println!("AAA {}", d)
+        }
+        assert_eq!(&vec![did1.to_string()], &dids);
+
+        let dids = contract.get_controlled_dids(owner.to_string().into(), None, None).unwrap();
+        for d in &dids {
+            println!("BBB {}", d)
+        }
+        assert_eq!(&vec![did1.to_string(), did2.to_string()], &dids);
+
+        let dids = contract.get_controlled_dids(owner2.to_string().into(), None, None).unwrap();
+        for d in &dids {
+            println!("CCC {}", d)
+        }
+        assert_eq!(&vec![did3.to_string()], &dids);
     }
 
     #[test]

@@ -3,7 +3,7 @@ use std::collections::HashSet;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, Storage};
-use cw_storage_plus::Map;
+use cw_storage_plus::{Index, IndexList, IndexedMap, Map, MultiIndex, Path};
 use schemars::JsonSchema;
 use serde::{de::{self, SeqAccess, Visitor}, ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
 use constcat::concat as constcat;
@@ -28,6 +28,24 @@ impl DidDocument {
 
     pub fn has_controller(&self, controller: &Controller) -> bool {
         self.controller.contains(controller)
+    }
+
+    pub fn has_any_controller(&self) -> bool {
+        !self.controller.is_empty()
+    }
+
+    pub fn ensure_controller(&self) -> Result<(), ContractError>  {
+        if !self.has_any_controller() {
+            return Err(ContractError::DidDocumentNoController())
+        }
+        Ok(())
+    }
+    
+    pub fn authorize(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, sender: &Controller) -> Result<(), ContractError> {
+        if !self.is_controlled_by(store, did_docs, sender)? {
+            return Err(ContractError::Unauthorized);
+        }
+        Ok(())
     }
 
     // TODO make not public for axternal crate
@@ -65,6 +83,23 @@ impl DidDocument {
             }
         }
         Ok(false)
+    }
+
+    pub fn is_valid(&self, api: &dyn Api) -> bool {
+        self.id.is_valid() &&
+            !self.controller.iter().any(|c| !c.is_valid(api)) &&
+            !self.service.iter().any(|c| !c.is_valid())
+    }
+
+    pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
+        self.id.ensure_valid()?;
+        for c in &self.controller {
+            c.ensure_valid(api)?
+        }
+        for c in &self.service {
+            c.ensure_valid()?
+        }
+        Ok(())
     }
 }
 
@@ -124,6 +159,29 @@ where
     // Deserialize the input either as a single element or a sequence
     deserializer.deserialize_any(ControllerVisitor)
 }
+pub struct DidDocumentIndexes<'a> {
+    pub controller: MultiIndex<'a, String, DidDocument, String>,
+
+}
+
+impl<'a> IndexList<DidDocument> for DidDocumentIndexes<'a> {
+    fn get_indexes(&'_ self) -> Box<dyn Iterator<Item = &'_ dyn Index<DidDocument>> + '_> {
+        let v: Vec<&dyn Index<DidDocument>> = vec![&self.controller];
+        Box::new(v.into_iter())
+    }
+}
+
+pub fn did_documents<'a>() -> IndexedMap<&'a str, DidDocument, DidDocumentIndexes<'a>> {
+    let indexes = DidDocumentIndexes {
+        controller: MultiIndex::new(
+            |_pk, d: &DidDocument| d.controller[0].to_string(),
+            "dids",
+            "did_controller",
+        )
+    };
+    IndexedMap::new("escrows", indexes)
+}
+
 #[cw_serde]
 pub struct Authentication {
     pub id: Did,
@@ -139,6 +197,18 @@ pub struct Service {
     #[serde(rename = "type")]
     pub a_type: String,
     pub service_endpoint: String,
+}
+
+impl Service {
+
+    pub fn is_valid(&self) -> bool {
+        self.id.is_valid()
+    }
+
+    pub fn ensure_valid(&self) -> Result<(), ContractError> {
+        self.id.ensure_valid()
+    }
+
 }
  
 #[derive(PartialEq, Debug, Clone, JsonSchema)]
@@ -173,6 +243,12 @@ impl<'de> Deserialize<'de> for Did {
 impl From<String> for Did { // TODO maybe change to TryFrom<String>
     fn from(s: String) -> Self {
         Did::new(&s)
+    }
+}
+
+impl From<Did> for String { // TODO maybe change to TryFrom<String>
+    fn from(s: Did) -> Self {
+        s.to_string()
     }
 }
 
@@ -217,8 +293,15 @@ impl Did {
         &self.0
     }
 
-    pub fn validate(&self) -> bool {
+    pub fn is_valid(&self) -> bool {
         Did::is_did(&self.0)
+    }
+
+    pub fn ensure_valid(&self) -> Result<(), ContractError> {
+        if !self.is_valid() {
+            return Err(ContractError::DidFormatError())
+        }
+        Ok(())
     }
 
     pub fn is_did(s: &str) -> bool {
@@ -291,8 +374,15 @@ impl Controller {
         &self.0
     }
 
-    pub fn validate(&self, api: &dyn Api) -> bool {
+    pub fn is_valid(&self, api: &dyn Api) -> bool {
         Controller::is_controller(api, &self.0)
+    }
+
+    pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
+        if !self.is_valid(api) {
+            return Err(ContractError::ControllerFormatError())
+        }
+        Ok(())
     }
 
     pub fn is_did(&self) -> bool {
