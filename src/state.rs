@@ -5,7 +5,7 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, Storage};
 use cw_storage_plus::Map;
 use schemars::JsonSchema;
-use serde::{Serialize, Serializer, Deserialize, Deserializer};
+use serde::{de::{self, SeqAccess, Visitor}, ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
 use constcat::concat as constcat;
 
 use crate::error::ContractError;
@@ -16,6 +16,7 @@ const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 #[cw_serde]
 pub struct DidDocument {
     pub id: Did,
+    #[serde(serialize_with = "serialize_controllers", deserialize_with = "deserialize_controllers")]
     pub controller: Vec<Controller>,
     pub service: Vec<Service>,
 }
@@ -67,6 +68,62 @@ impl DidDocument {
     }
 }
 
+
+// Custom serialization for controller field
+fn serialize_controllers<S>(controller: &Vec<Controller>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    if controller.len() == 1 {
+        // If there's only one element, serialize it as a single Controller (not as an array)
+        serializer.serialize_some(&controller[0])
+    } else {
+        // Otherwise, serialize as an array of Controllers
+        let mut seq = serializer.serialize_seq(Some(controller.len()))?;
+        for item in controller {
+            seq.serialize_element(item)?;
+        }
+        seq.end()
+    }
+}
+
+// Custom deserialization for controller field
+fn deserialize_controllers<'de, D>(deserializer: D) -> Result<Vec<Controller>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    struct ControllerVisitor;
+
+    impl<'de> Visitor<'de> for ControllerVisitor {
+        type Value = Vec<Controller>;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+            formatter.write_str("a string or a sequence of controllers")
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            // If it's a string, wrap it in a Vec
+            Ok(vec![Controller(value.to_string())])
+        }
+
+        fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+        where
+            A: SeqAccess<'de>,
+        {
+            let mut controllers = Vec::new();
+            while let Some(controller) = seq.next_element()? {
+                controllers.push(controller);
+            }
+            Ok(controllers)
+        }
+    }
+
+    // Deserialize the input either as a single element or a sequence
+    deserializer.deserialize_any(ControllerVisitor)
+}
 #[cw_serde]
 pub struct Authentication {
     pub id: Did,
@@ -320,7 +377,7 @@ mod tests {
     }
 
     #[test]
-    fn test_did_serialization() {
+    fn test_did_serialization_one_controller() {
         // Create a sample Did struct with multiple services
         let service1 = Service {
             id: Did::new("service1"),
@@ -340,9 +397,10 @@ mod tests {
 
         // Serialize to JSON
         let serialized = to_string(&did).unwrap();
+        println!("FFFFF {}", serialized);
         let expected_json = json!({
             "id": "did1",
-            "controller": ["controller1"],
+            "controller": "controller1",
             "service": [
                 {
                     "id": "service1",
@@ -366,6 +424,70 @@ mod tests {
         let deserialized: DidDocument = from_str(&serialized).unwrap();
         assert_eq!(deserialized.id, Did::new("did1"));
         assert_eq!(deserialized.controller, vec![Controller::new("controller1")]);
+        assert_eq!(deserialized.service.len(), 2);
+        assert_eq!(deserialized.service[0].id, Did::new("service1"));
+        assert_eq!(deserialized.service[0].a_type, "ServiceType1");
+        assert_eq!(
+            deserialized.service[0].service_endpoint,
+            "https://service1.com"
+        );
+        assert_eq!(deserialized.service[1].id, Did::new("service2"));
+        assert_eq!(deserialized.service[1].a_type, "ServiceType2");
+        assert_eq!(
+            deserialized.service[1].service_endpoint,
+            "https://service2.com"
+        );
+    }
+
+    #[test]
+    fn test_did_serialization_many_controllers() {
+        // Create a sample Did struct with multiple services
+        let service1 = Service {
+            id: Did::new("service1"),
+            a_type: "ServiceType1".to_string(),
+            service_endpoint: "https://service1.com".to_string(),
+        };
+        let service2 = Service {
+            id: Did::new("service2"),
+            a_type: "ServiceType2".to_string(),
+            service_endpoint: "https://service2.com".to_string(),
+        };
+        let did = DidDocument {
+            id: Did::new("did1"),
+            controller: vec![Controller::new("controller1"), Controller::new("controller2")],
+            service: vec![service1, service2],
+        };
+
+        // Serialize to JSON
+        let serialized = to_string(&did).unwrap();
+        println!("FFFFF {}", serialized);
+        let expected_json = json!({
+            "id": "did1",
+            "controller": ["controller1","controller2"],
+            "service": [
+                {
+                    "id": "service1",
+                    "type": "ServiceType1",
+                    "service_endpoint": "https://service1.com"
+                },
+                {
+                    "id": "service2",
+                    "type": "ServiceType2",
+                    "service_endpoint": "https://service2.com"
+                }
+            ]
+        });
+
+        let serialized_value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
+
+        // Compare with expected JSON string
+        assert_eq!(serialized_value, expected_json);
+
+        // Deserialize back to struct
+        let deserialized: DidDocument = from_str(&serialized).unwrap();
+        assert_eq!(deserialized, did);
+        assert_eq!(deserialized.id, Did::new("did1"));
+        assert_eq!(deserialized.controller, vec![Controller::new("controller1"), Controller::new("controller2")]);
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));
         assert_eq!(deserialized.service[0].a_type, "ServiceType1");
