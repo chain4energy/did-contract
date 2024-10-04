@@ -4,7 +4,7 @@ use serde_json::json;
 use serial_test::serial;
 use e2e_test_suite::{ADDR_PREFIX, derive_private_key_from_mnemonic};
 
-use crate::state::DidDocument;
+use crate::state::{Did, DidDocument};
 
 const MENMONIC: &str = "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
@@ -67,7 +67,7 @@ fn create_did_document() {
         assert!(result.is_ok(), "Expected Ok, but got an Err");
         
     }
-    let query_msg = super::super::contract::sv::QueryMsg::GetDidDocument { did: did.to_string() };
+    let query_msg = super::super::contract::sv::QueryMsg::GetDidDocument { did: Did::new(did) };
     let query = json!(query_msg).to_string();
     println!("Query: {query}");
     let result = context.chain.query.contract(&context.contract_address, &query);

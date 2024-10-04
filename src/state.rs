@@ -10,8 +10,8 @@ use constcat::concat as constcat;
 
 use crate::error::ContractError;
 
-const DID_PREFIX: &str = "didc4e:c4e:"; // TODO make configurable on contract instatiating
-const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
+pub const DID_PREFIX: &str = "didc4e:c4e:"; // TODO make configurable on contract instatiating
+// const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 
 #[cw_serde]
 pub struct DidDocument {
@@ -246,6 +246,18 @@ impl From<String> for Did { // TODO maybe change to TryFrom<String>
     }
 }
 
+impl From<&String> for Did { // TODO maybe change to TryFrom<String>
+    fn from(s: &String) -> Self {
+        Did::new(s)
+    }
+}
+
+impl From<&str> for Did { // TODO maybe change to TryFrom<String>
+    fn from(s: &str) -> Self {
+        Did::new(s)
+    }
+}
+
 impl From<Did> for String { // TODO maybe change to TryFrom<String>
     fn from(s: Did) -> Self {
         s.to_string()
@@ -284,10 +296,10 @@ impl Did {
         Did(s.to_string())
     }
 
-    pub fn new_address(s: &str) -> Self {
-        let id: String = ADDRESS_DID_PREFIX.to_string() + s;
-        Did(id)
-    }
+    // pub fn new_address(s: &str) -> Self {
+    //     let id: String = ADDRESS_DID_PREFIX.to_string() + s;
+    //     Did(id)
+    // }
 
     pub fn value(&self) -> &str {
         &self.0
@@ -354,6 +366,18 @@ impl PartialEq<Controller> for String {
 impl From<String> for Controller {  // TODO maybe change to TryFrom<String>
     fn from(s: String) -> Self {
         Controller::new(&s)
+    }
+}
+
+impl From<&String> for Controller { // TODO maybe change to TryFrom<String>
+    fn from(s: &String) -> Self {
+        Controller::new(s)
+    }
+}
+
+impl From<&str> for Controller { // TODO maybe change to TryFrom<String>
+    fn from(s: &str) -> Self {
+        Controller::new(s)
     }
 }
 
