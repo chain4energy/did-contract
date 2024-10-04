@@ -18,6 +18,7 @@ pub struct DidDocument {
     pub id: Did,
     #[serde(serialize_with = "serialize_controllers", deserialize_with = "deserialize_controllers")]
     pub controller: Vec<Controller>,
+    // pub controller: Controllers,
     pub service: Vec<Service>,
 }
 
@@ -25,6 +26,14 @@ impl DidDocument {
     pub fn has_service(&self, service_did: &Did) -> bool {
         self.service.iter().any(|service| &service.id == service_did)
     }
+
+    // pub fn has_controller(&self, controller: &Controller) -> bool {
+    //     self.controller.controllers().contains(controller)
+    // }
+
+    // pub fn has_any_controller(&self) -> bool {
+    //     !self.controller.controllers().is_empty()
+    // }
 
     pub fn has_controller(&self, controller: &Controller) -> bool {
         self.controller.contains(controller)
@@ -55,14 +64,12 @@ impl DidDocument {
     }
 
     fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
-        for c in &self.controller {
-            // println!("did: {}, controller: {}, external_controller: {}", self.id.to_string(), c, &controller);
+        for c in &self.controller{
+        // for c in self.controller.controllers() {
             if c == controller {
-                // println!("controller: {} == external_controller: {}", c, controller);
                 return Ok(true);
             }
             if c.is_did() {
-                // println!("controller: {} is did", c);
                 if already_checked.insert(c.to_string()) {
                     let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
                     match did_doc_result {
@@ -87,12 +94,14 @@ impl DidDocument {
 
     pub fn is_valid(&self, api: &dyn Api) -> bool {
         self.id.is_valid() &&
+            // !self.controller.controllers().iter().any(|c| !c.is_valid(api)) &&
             !self.controller.iter().any(|c| !c.is_valid(api)) &&
             !self.service.iter().any(|c| !c.is_valid())
     }
 
     pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
         self.id.ensure_valid()?;
+        // for c in self.controller.controllers() {
         for c in &self.controller {
             c.ensure_valid(api)?
         }
@@ -111,12 +120,12 @@ where
 {
     if controller.len() == 1 {
         // If there's only one element, serialize it as a single Controller (not as an array)
-        serializer.serialize_some(&controller[0])
+        serializer.serialize_some(&controller[0].to_string())
     } else {
         // Otherwise, serialize as an array of Controllers
         let mut seq = serializer.serialize_seq(Some(controller.len()))?;
         for item in controller {
-            seq.serialize_element(item)?;
+            seq.serialize_element(&item.to_string())?;
         }
         seq.end()
     }
@@ -128,7 +137,6 @@ where
     D: Deserializer<'de>,
 {
     struct ControllerVisitor;
-
     impl<'de> Visitor<'de> for ControllerVisitor {
         type Value = Vec<Controller>;
 
@@ -174,6 +182,7 @@ impl<'a> IndexList<DidDocument> for DidDocumentIndexes<'a> {
 pub fn did_documents<'a>() -> IndexedMap<&'a str, DidDocument, DidDocumentIndexes<'a>> {
     let indexes = DidDocumentIndexes {
         controller: MultiIndex::new(
+            // |_pk, d: &DidDocument| d.controller.controllers()[0].to_string(),
             |_pk, d: &DidDocument| d.controller[0].to_string(),
             "dids",
             "did_controller",
@@ -422,6 +431,78 @@ impl Controller {
 
 }
 
+// #[derive(PartialEq, Debug, Clone, JsonSchema)]
+// pub struct Controllers(pub Vec<Controller>);
+
+// impl Serialize for Controllers {
+//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//     where
+//         S: Serializer
+//     {
+
+//         if self.0.len() == 1 {
+//             // If there's only one element, serialize it as a single Controller (not as an array)
+//             serializer.serialize_str(&self.0[0].to_string())
+//         } else {
+//             // Otherwise, serialize as an array of Controllers
+//             let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
+//             for item in &self.0 {
+//                 seq.serialize_element(&item.to_string())?;
+//             }
+//             seq.end()
+//         }
+//     }
+// }
+
+// impl<'de> Deserialize<'de> for Controllers {
+//     fn deserialize<D>(deserializer: D) -> Result<Controllers, D::Error>
+//     where
+//         D: Deserializer<'de>
+//     {
+//         struct ControllerVisitor;
+//         impl<'de> Visitor<'de> for ControllerVisitor {
+//             type Value = Vec<Controller>;
+
+//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+//                 formatter.write_str("a string or a sequence of controllers")
+//             }
+
+//             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+//             where
+//                 E: de::Error,
+//             {
+//                 // If it's a string, wrap it in a Vec
+//                 Ok(vec![Controller(value.to_string())])
+//             }
+
+//             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
+//             where
+//                 A: SeqAccess<'de>,
+//             {
+//                 let mut controllers = Vec::new();
+//                 while let Some(controller) = seq.next_element()? {
+//                     controllers.push(controller);
+//                 }
+//                 Ok(controllers)
+//             }
+//         }
+
+//         let vec = deserializer.deserialize_any(ControllerVisitor)?;
+//         Ok(Controllers(vec))
+//     }
+// }
+
+
+// impl Controllers {
+//     pub fn controllers(&self) -> &Vec<Controller> {
+//         &self.0
+//     }
+
+//     pub fn mut_controllers(&mut self) -> &mut Vec<Controller> {
+//         &mut self.0
+//     }
+// }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -505,6 +586,7 @@ mod tests {
         };
         let did = DidDocument {
             id: Did::new("did1"),
+            // controller: Controllers(vec![Controller::new("controller1")]),
             controller: vec![Controller::new("controller1")],
             service: vec![service1, service2],
         };
@@ -537,6 +619,7 @@ mod tests {
         // Deserialize back to struct
         let deserialized: DidDocument = from_str(&serialized).unwrap();
         assert_eq!(deserialized.id, Did::new("did1"));
+        // assert_eq!(deserialized.controller, Controllers(vec![Controller::new("controller1")]));
         assert_eq!(deserialized.controller, vec![Controller::new("controller1")]);
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));
@@ -568,6 +651,7 @@ mod tests {
         };
         let did = DidDocument {
             id: Did::new("did1"),
+            // controller: Controllers(vec![Controller::new("controller1"), Controller::new("controller2")]),
             controller: vec![Controller::new("controller1"), Controller::new("controller2")],
             service: vec![service1, service2],
         };
@@ -601,6 +685,7 @@ mod tests {
         let deserialized: DidDocument = from_str(&serialized).unwrap();
         assert_eq!(deserialized, did);
         assert_eq!(deserialized.id, Did::new("did1"));
+        // assert_eq!(deserialized.controller, Controllers(vec![Controller::new("controller1"), Controller::new("controller2")]));
         assert_eq!(deserialized.controller, vec![Controller::new("controller1"), Controller::new("controller2")]);
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));

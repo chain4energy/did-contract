@@ -74,7 +74,9 @@ impl DidContract {
         }
         let mut new_doc = did_doc;
         if !new_doc.has_any_controller() {
+            // new_doc.controller.mut_controllers().push(Controller::new(&ctx.info.sender.to_string()));
             new_doc.controller.push(Controller::new(&ctx.info.sender.to_string()));
+
         }
 
         // TODO checking if did controllers exists
@@ -135,7 +137,9 @@ impl DidContract {
             return Err(ContractError::DidDocumentControllerAlreadyExists);
         }
         // TODO checking if did controller exists
+        // did_doc.controller.mut_controllers().push(controller.clone());
         did_doc.controller.push(controller.clone());
+
 
         let r = self.did_docs.save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
         match r {
@@ -166,6 +170,7 @@ impl DidContract {
             return Err(ContractError::DidDocumentControllerNotExists);
         }
 
+        // did_doc.controller.mut_controllers().retain(|s| *s != controller);
         did_doc.controller.retain(|s| *s != controller);
         did_doc.ensure_controller()?;
 
@@ -270,6 +275,7 @@ impl DidContract {
     }
     
     fn index_controllers(&self,store: &mut dyn Storage, did_doc: &DidDocument) -> Result<(), ContractError>{
+        // for c in did_doc.controller.controllers() {
         for c in &did_doc.controller {
             let r = self.controllers.save(store, &c.to_string(), &did_doc.id.to_string());
             if let Err(e) = r {
@@ -280,6 +286,7 @@ impl DidContract {
     }
 
     fn unindex_controllers(&self,store: &mut dyn Storage, did_doc: &DidDocument) {
+        // for c in did_doc.controller.controllers() {
         for c in &did_doc.controller {
             self.controllers.remove(store, &c.to_string(), &did_doc.id.to_string());
         }
@@ -366,6 +373,7 @@ mod tests {
         let mut new_did_doc = DidDocument{
             id: Did::new(did),
             controller: vec![owner.to_string().into()],
+            // controller: Controllers(vec![owner.to_string().into()]),
             service: vec![Service{
                 a_type: "".to_string(),
                 id: Did::new("dfdsfs"),
@@ -406,6 +414,7 @@ mod tests {
         let did1 =  format!("{}{}", DID_PREFIX, "new_did11111111111111111111111111");
         let new_did_doc = DidDocument{
             id: Did::new(&did1),
+            // controller: Controllers(vec![owner.to_string().into()]),
             controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -419,6 +428,7 @@ mod tests {
         let did2 =  format!("{}{}", DID_PREFIX, "new_did22222222222222222222222222");
         let new_did_doc = DidDocument{
             id: Did::new(&did2),
+            // controller: Controllers(vec![owner.to_string().into()]),
             controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -433,6 +443,7 @@ mod tests {
         let did3 =  format!("{}{}", DID_PREFIX, "new_did333333333333333333333333333");
         let new_did_doc = DidDocument{
             id: Did::new(&did3),
+            // controller: Controllers(vec![owner2.to_string().into()]),
             controller: vec![owner2.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -479,6 +490,7 @@ mod tests {
         let did_simple = format!("{}{}", DID_PREFIX, "did_simple");
         let did_doc_simple = DidDocument{
             id: Did::new(&did_simple),
+            // controller: Controllers(vec![owner.to_string().into()]),
             controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -505,6 +517,7 @@ mod tests {
         let did_controlled_by_itself = "didc4e:c4e:did_controlled_by_himself";
         let did_doc_controlled_by_itself = DidDocument{
             id: Did::new(did_controlled_by_itself),
+            // controller: Controllers(vec![did_controlled_by_itself.to_string().into()]),
             controller: vec![did_controlled_by_itself.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -528,6 +541,7 @@ mod tests {
         let did_looped_2 = &format!("{}{}", DID_PREFIX, "did_looped_2");
         let did_doc_looped_1 = DidDocument{
             id: Did::new(did_looped_1),
+            // controller: Controllers(vec![did_looped_2.to_string().into()]),
             controller: vec![did_looped_2.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -538,6 +552,7 @@ mod tests {
 
         let did_doc_looped_2 = DidDocument{
             id: Did::new(did_looped_2),
+            // controller: Controllers(vec![did_looped_1.to_string().into()]),
             controller: vec![did_looped_1.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -567,6 +582,7 @@ mod tests {
         let did_controlled_by_simple = &format!("{}{}", DID_PREFIX, "did_controlled_by_simple");
         let did_doc_controlled_by_simple = DidDocument{
             id: Did::new(did_controlled_by_simple),
+            // controller: Controllers(vec![did_simple.to_string().into()]),
             controller: vec![did_simple.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -605,6 +621,7 @@ mod tests {
         let did =  &format!("{}{}", DID_PREFIX, "new_did");
         let mut new_did_doc = DidDocument{
             id: Did::new(did),
+            // controller: Controllers(vec![owner.to_string().into()]),
             controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -617,6 +634,7 @@ mod tests {
 
         new_did_doc = DidDocument{
             id: Did::new(did),
+            // controller: Controllers(vec![owner.to_string().into()]),
             controller: vec![owner.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -660,6 +678,7 @@ mod tests {
         let did = &format!("{}{}", DID_PREFIX, "new_did");
         let new_did_doc = DidDocument{
             id: Did::new(did),
+            // controller: Controllers(vec![owner_addr.to_string().into()]),
             controller: vec![owner_addr.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),
@@ -696,6 +715,7 @@ mod tests {
         let did = &format!("{}{}", DID_PREFIX, "new_did");
         let new_did_doc = DidDocument{
             id: Did::new(did),
+            // controller: Controllers(vec![owner_addr.to_string().into()]),
             controller: vec![owner_addr.to_string().into()],
             service: vec![Service{
                 a_type: "".to_string(),

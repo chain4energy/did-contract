@@ -4,12 +4,14 @@ use serde_json::json;
 use serial_test::serial;
 use e2e_test_suite::{ADDR_PREFIX, derive_private_key_from_mnemonic};
 
-use crate::state::{Did, DidDocument};
+use crate::state::{Did, DidDocument, DID_PREFIX};
 
 const MENMONIC: &str = "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
 
-const CONTRACT_PATH: &str = "./artifacts/did_contract.wasm";
+// const CONTRACT_PATH: &str = "./artifacts/did_contract.wasm";
+const CONTRACT_PATH: &str = "./target/wasm32-unknown-unknown/release/did_contract.wasm";
+
 
 #[test]
 #[serial]
@@ -39,13 +41,33 @@ fn create_did_document() {
     //     }
     // }"#;
 
-    let did = "did:example:000432";
+    // let msg = r#"
+    //     {
+    //         "create_did_document":{
+    //             "did_doc":{
+    //                 "controller":"didc4e:c4e:user:000131",
+    //                 "id":"didc4e:c4e:example:000432",
+    //                 "service":[
+    //                     {
+    //                         "id":"didc4e:c4e:service:000131",
+    //                         "service_endpoint":"http://chargera.io",
+    //                         "type":"Chargera"
+    //                     }
+    //                 ]
+    //             }
+    //         }
+    //     }"#.to_string();
+
+    let did = &format!("{}{}", DID_PREFIX, "example:000432");
 
     let did_doc = DidDocument { 
         id: crate::state::Did::new(did), 
-        controller: vec!["did:user:000131".to_string().into()], 
+        // controller: Controllers(vec![format!("{}{}", DID_PREFIX, "user:000131").into(), format!("{}{}", DID_PREFIX, "user:000134").into()]), 
+        // controller: vec![format!("{}{}", DID_PREFIX, "user:000131").into(), format!("{}{}", DID_PREFIX, "user:000134").into()], 
+        controller: vec![format!("{}{}", DID_PREFIX, "user:000131").into()], 
+
         service: vec![crate::state::Service{
-            id: crate::state::Did::new("did:service:000131"),
+            id: crate::state::Did::new(&format!("{}{}", DID_PREFIX, "service:000131")),
             a_type: "Chargera".to_string(),
             service_endpoint: "http://chargera.io".to_string()
         }],
