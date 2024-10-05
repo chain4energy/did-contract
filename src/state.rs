@@ -3,10 +3,9 @@ use std::collections::HashSet;
 
 use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, Storage};
-use cw_storage_plus::{Index, IndexList, IndexedMap, Map, MultiIndex, Path};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Map, MultiIndex};
 use schemars::JsonSchema;
 use serde::{de::{self, SeqAccess, Visitor}, ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
-use constcat::concat as constcat;
 
 use crate::error::ContractError;
 

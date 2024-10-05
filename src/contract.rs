@@ -1,6 +1,6 @@
 use cosmwasm_std::{Deps, Order, Response, StdError, StdResult, Storage};
 // use cw_storage_plus::Item;
-use cw_storage_plus::{Bound, Deque, Map};
+use cw_storage_plus::{Bound, Map};
 use sylvia::{contract, entry_points};
 use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
 use crate::error::ContractError;
@@ -295,8 +295,6 @@ impl DidContract {
 
 #[cfg(test)]
 mod tests {
-    use std::borrow::{Borrow, BorrowMut};
-
     use cw_storage_plus::Map;
     use sylvia::cw_multi_test::IntoAddr;
     use sylvia::multitest::App;

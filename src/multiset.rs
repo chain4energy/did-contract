@@ -1,5 +1,5 @@
-use cw_storage_plus::{Bound, Key, Map, Namespace, Path, Prefix};
-use cosmwasm_std::{StdResult, Storage};
+use cw_storage_plus::{Bound, Map};
+use cosmwasm_std::Storage;
 
 /// MultiMap struct that provides an abstraction over the Path-based multi-map
 pub struct MultiSet {
