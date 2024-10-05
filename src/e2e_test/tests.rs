@@ -1,5 +1,6 @@
 
 use cosmrs::crypto::secp256k1::SigningKey;
+// use cw_multi_test::IntoAddr;
 use serde_json::json;
 use serial_test::serial;
 use e2e_test_suite::{ADDR_PREFIX, derive_private_key_from_mnemonic};
@@ -60,11 +61,13 @@ fn create_did_document() {
 
     let did = &format!("{}{}", DID_PREFIX, "example:000432");
 
+    let did_controller = "c4e1ja3l8vxxjnq9reeal89pvt2mzf6cq9d7s5xk9d";
     let did_doc = DidDocument { 
         id: crate::state::Did::new(did), 
         // controller: Controllers(vec![format!("{}{}", DID_PREFIX, "user:000131").into(), format!("{}{}", DID_PREFIX, "user:000134").into()]), 
         // controller: vec![format!("{}{}", DID_PREFIX, "user:000131").into(), format!("{}{}", DID_PREFIX, "user:000134").into()], 
-        controller: vec![format!("{}{}", DID_PREFIX, "user:000131").into()], 
+        // controller: vec![format!("{}{}", DID_PREFIX, "user:000131").into()], 
+        controller: vec![did_controller.to_string().into()], 
 
         service: vec![crate::state::Service{
             id: crate::state::Did::new(&format!("{}{}", DID_PREFIX, "service:000131")),

@@ -49,7 +49,55 @@ impl DidDocument {
         }
         Ok(())
     }
-    
+
+    pub fn ensure_not_self_controlled(&self) -> Result<(), ContractError>  {
+        for c in &self.controller {
+            if self.id.to_string() == c.to_string() {
+                return Err(ContractError::SelfControlledDidDocumentNotAllowed());
+            }
+        }
+        Ok(())
+    }
+
+    pub fn ensure_controllers_exist(&self, store: &mut dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+        for c in &self.controller {
+            ensure_controller_exist(store, did_docs, c)?;
+        }
+        Ok(())
+    }
+
+    pub fn ensure_signability(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+        let mut already_checked: HashSet<String> = HashSet::new();
+        self.can_be_signed(store, did_docs, &mut already_checked)
+    }
+
+    fn can_be_signed(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, already_checked: &mut HashSet<String>) -> Result<(), ContractError> {
+        for c in &self.controller{
+            // for c in self.controller.controllers() {
+            if c.is_signable() {
+                return Ok(());
+            } else  {
+                if already_checked.insert(c.to_string()) {
+                    let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
+                    match did_doc_result {
+                        Ok(did_document) => {
+                            if let Ok(_) = did_document.can_be_signed(store, did_docs, already_checked) {
+                                return Ok(());
+                            }
+                        },
+                        Err(e) => match e {
+                            StdError::NotFound{ .. } => (),
+                            _ => {
+                                return Err(ContractError::DidDocumentError(e));
+                            },
+                        },
+                    }
+                }
+            }
+        }
+        Err(ContractError::DidDocumentUnsignable())
+    }
+
     pub fn authorize(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, sender: &Controller) -> Result<(), ContractError> {
         if !self.is_controlled_by(store, did_docs, sender)? {
             return Err(ContractError::Unauthorized);
@@ -112,6 +160,14 @@ impl DidDocument {
     }
 }
 
+pub fn ensure_controller_exist(store: &mut dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<(), ContractError> {
+    if controller.is_did() {
+        if !did_docs.has(store, controller.to_string()) {
+            return Err(ContractError::DidControllerNotFound());
+        }
+    }
+    Ok(())
+}
 
 // Custom serialization for controller field
 fn serialize_controllers<S>(controller: &Vec<Controller>, serializer: S) -> Result<S::Ok, S::Error>
@@ -420,6 +476,10 @@ impl Controller {
 
     pub fn is_did(&self) -> bool {
         Did::is_did(&self.0)
+    }
+
+    pub fn is_signable(&self) -> bool {
+        !self.is_did()
     }
 
     pub fn is_controller(api: &dyn Api, s: &str) -> bool {
