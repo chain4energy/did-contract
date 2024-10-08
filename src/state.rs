@@ -21,8 +21,21 @@ pub struct DidDocument {
     pub service: Vec<Service>,
 }
 
+pub(crate) trait Controllers {
+    fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError>;
+}
+
+impl Controllers for Vec<Controller> {
+    fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+        for c in self {
+            c.ensure_exist(store, did_docs)?;
+        }
+        Ok(())
+    }
+}
+
 impl DidDocument {
-    pub fn has_service(&self, service_did: &Did) -> bool {
+    pub(crate) fn has_service(&self, service_did: &Did) -> bool {
         self.service.iter().any(|service| &service.id == service_did)
     }
 
@@ -34,22 +47,22 @@ impl DidDocument {
     //     !self.controller.controllers().is_empty()
     // }
 
-    pub fn has_controller(&self, controller: &Controller) -> bool {
+    pub(crate) fn has_controller(&self, controller: &Controller) -> bool {
         self.controller.contains(controller)
     }
 
-    pub fn has_any_controller(&self) -> bool {
+    pub(crate) fn has_any_controller(&self) -> bool {
         !self.controller.is_empty()
     }
 
-    pub fn ensure_controller(&self) -> Result<(), ContractError>  {
+    pub(crate) fn ensure_controller(&self) -> Result<(), ContractError>  {
         if !self.has_any_controller() {
             return Err(ContractError::DidDocumentNoController())
         }
         Ok(())
     }
 
-    pub fn ensure_not_self_controlled(&self) -> Result<(), ContractError>  {
+    pub(crate) fn ensure_not_self_controlled(&self) -> Result<(), ContractError>  {
         for c in &self.controller {
             if self.id.to_string() == c.to_string() {
                 return Err(ContractError::SelfControlledDidDocumentNotAllowed());
@@ -58,14 +71,11 @@ impl DidDocument {
         Ok(())
     }
 
-    pub fn ensure_controllers_exist(&self, store: &mut dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
-        for c in &self.controller {
-            ensure_controller_exist(store, did_docs, c)?;
-        }
-        Ok(())
+    pub(crate) fn ensure_controllers_exist(&self, store: &mut dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+        self.controller.ensure_exist(store, did_docs)
     }
 
-    pub fn ensure_signability(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+    pub(crate) fn ensure_signability(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
         let mut already_checked: HashSet<String> = HashSet::new();
         self.can_be_signed(store, did_docs, &mut already_checked)
     }
@@ -97,46 +107,21 @@ impl DidDocument {
         Err(ContractError::DidDocumentUnsignable())
     }
 
-    pub fn authorize(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, sender: &Controller) -> Result<(), ContractError> {
+    pub(crate) fn authorize(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, sender: &Controller) -> Result<(), ContractError> {
         if !self.is_controlled_by(store, did_docs, sender)? {
             return Err(ContractError::Unauthorized);
         }
         Ok(())
     }
 
-    // TODO make not public for axternal crate
-    pub fn is_controlled_by(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<bool, ContractError> {
+    pub(crate) fn is_controlled_by(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<bool, ContractError> {
         let mut already_checked: HashSet<String> = HashSet::new();
-        self.is_controller_internal(store, did_docs, controller, &mut already_checked)
+        is_controller_of_internal(store, did_docs, &self.controller, controller, &mut already_checked)
+        // self.is_controller_internal(store, did_docs, controller, &mut already_checked)
     }
 
     fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
-        for c in &self.controller{
-        // for c in self.controller.controllers() {
-            if c == controller {
-                return Ok(true);
-            }
-            if c.is_did() {
-                if already_checked.insert(c.to_string()) {
-                    let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
-                    match did_doc_result {
-                        Ok(did_document) => {
-                            let is_controller = did_document.is_controller_internal(store, did_docs, controller, already_checked)?;
-                            if is_controller {
-                                return Ok(true);
-                            }
-                        },
-                        Err(e) => match e {
-                            StdError::NotFound{ .. } => (),
-                            _ => {
-                                return Err(ContractError::DidDocumentError(e));
-                            },
-                        },
-                    }
-                }
-            }
-        }
-        Ok(false)
+        is_controller_of_internal(store, did_docs, &self.controller, controller, already_checked)
     }
 
     pub fn is_valid(&self, api: &dyn Api) -> bool {
@@ -159,13 +144,47 @@ impl DidDocument {
     }
 }
 
-pub fn ensure_controller_exist(store: &mut dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<(), ContractError> {
-    if controller.is_did() {
-        if !did_docs.has(store, controller.to_string()) {
-            return Err(ContractError::DidControllerNotFound());
+// pub fn ensure_controller_exist(store: &mut dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<(), ContractError> {
+//     if controller.is_did() {
+//         if !did_docs.has(store, controller.to_string()) {
+//             return Err(ContractError::DidControllerNotFound());
+//         }
+//     }
+//     Ok(())
+// }
+
+pub fn is_controller_of(store: &dyn Storage, did_docs: &Map<String, DidDocument>, controllers: &Vec<Controller>, controller: &Controller)  -> Result<bool, ContractError> {
+    let mut already_checked: HashSet<String> = HashSet::new();
+    is_controller_of_internal(store, did_docs, controllers, controller, &mut already_checked)
+}
+
+fn is_controller_of_internal(store: &dyn Storage, did_docs: &Map<String, DidDocument>, controllers: &Vec<Controller>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
+    for c in controllers{
+    // for c in self.controller.controllers() {
+        if c == controller {
+            return Ok(true);
+        }
+        if c.is_did() {
+            if already_checked.insert(c.to_string()) {
+                let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
+                match did_doc_result {
+                    Ok(did_document) => {
+                        let is_controller = did_document.is_controller_internal(store, did_docs, controller, already_checked)?;
+                        if is_controller {
+                            return Ok(true);
+                        }
+                    },
+                    Err(e) => match e {
+                        StdError::NotFound{ .. } => (),
+                        _ => {
+                            return Err(ContractError::DidDocumentError(e));
+                        },
+                    },
+                }
+            }
         }
     }
-    Ok(())
+    Ok(false)
 }
 
 // Custom serialization for controller field
@@ -486,6 +505,15 @@ impl Controller {
             return Did::is_did(s)
         }
         true
+    }
+
+    pub(crate) fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+        if self.is_did() {
+            if !did_docs.has(store, self.to_string()) {
+                return Err(ContractError::DidControllerNotFound());
+            }
+        }
+        Ok(())
     }
 
 }

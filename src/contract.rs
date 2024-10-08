@@ -5,13 +5,16 @@ use sylvia::{contract, entry_points};
 use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
 use crate::error::ContractError;
 use crate::multiset::MultiSet;
-use crate::state::{ensure_controller_exist, Controller, DidDocument, Service};
+use crate::state::{self, Controller, DidDocument, Service, Controllers};
 use crate::state::Did;
 pub struct DidContract {
     pub did_docs: Map<String, DidDocument>,
     pub controllers: MultiSet, // TODO optimize indexing on controllers
 }
 // TODO update error handling
+// TODO responses for msgs
+// TODO response Events
+
 #[entry_points]
 #[contract]
 #[sv::error(ContractError)]
@@ -42,6 +45,41 @@ impl DidContract {
         let doc = self.get_did_doc(ctx.deps.storage, did.value())?;
         doc.is_controlled_by(ctx.deps.storage, &self.did_docs, &controller)
     }
+
+    #[sv::msg(query)]
+    pub fn is_controller_of(&self, ctx: QueryCtx, controllers: Vec<Controller>, controller: Controller) -> Result<bool, ContractError> {
+        controller.ensure_valid(ctx.deps.api)?;
+        for c in &controllers {
+            c.ensure_valid(ctx.deps.api)?;
+        }
+        state::is_controller_of(ctx.deps.storage, &self.did_docs, &controllers, &controller)
+    }
+
+    #[sv::msg(query)]
+    pub fn do_controllers_exist(&self, ctx: QueryCtx, controllers: Vec<Controller>) -> Result<bool, ContractError> {
+        match controllers.ensure_exist(ctx.deps.storage, &self.did_docs) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false)
+        }
+    }
+
+    #[sv::msg(query)]
+    pub fn does_controller_exist(&self, ctx: QueryCtx, controller: Controller) -> Result<bool, ContractError> {
+        match controller.ensure_exist(ctx.deps.storage, &self.did_docs) {
+            Ok(_) => Ok(true),
+            Err(_) => Ok(false)
+        }
+    }
+
+    // TODO ??????
+    // #[sv::msg(query)]
+    // pub fn authotize(&self, ctx: QueryCtx, controllers: Vec<Controller>, controller: Controller) -> Result<bool, ContractError> {
+    //     controller.ensure_valid(ctx.deps.api)?;
+    //     for c in &controllers {
+    //         c.ensure_valid(ctx.deps.api)?;
+    //     }
+    //     state::is_controller_of(ctx.deps.storage, &self.did_docs, &controllers, &controller)
+    // }
 
     #[sv::msg(query)]
     pub fn get_controlled_dids(&self, ctx: QueryCtx, controller: Controller, limit: Option<usize>, start_after: Option<String>) -> Result<Vec<Did>, ContractError> {
@@ -131,7 +169,7 @@ impl DidContract {
         did_doc.controller.push(controller.clone());
         did_doc.ensure_not_self_controlled()?;
 
-        ensure_controller_exist(ctx.deps.storage, &self.did_docs, &controller)?;
+        controller.ensure_exist(ctx.deps.storage, &self.did_docs)?;
 
         let r = self.did_docs.save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
         match r {
