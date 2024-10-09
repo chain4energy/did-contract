@@ -1,15 +1,18 @@
 
+use std::collections::HashMap;
+
 use cosmrs::crypto::secp256k1::SigningKey;
 // use cw_multi_test::IntoAddr;
 use serde_json::json;
 use serial_test::serial;
-use e2e_test_suite::{ADDR_PREFIX, derive_private_key_from_mnemonic};
+use e2e_test_suite::{derive_private_key_from_mnemonic, ContractInit, ADDR_PREFIX};
 
 use crate::state::{Did, DidDocument, DID_PREFIX};
 
 const MENMONIC: &str = "harbor flee number sibling doll recycle brisk mask blanket orphan initial maze race flash limb sound wing ramp proud battle feature ceiling feel miss";
 const HD_PATH: &str = "m/44'/118'/0'/0/0";
 
+const CONTRACT_NAME: &str = "did";
 // const CONTRACT_PATH: &str = "./artifacts/did_contract.wasm";
 const CONTRACT_PATH: &str = "./target/wasm32-unknown-unknown/release/did_contract.wasm";
 
@@ -21,8 +24,7 @@ fn create_did_document() {
     // setup_context();
     println!("RUN create_did_document");
 
-    let context =  e2e_test_suite::CONTEXT.get().expect("Docker controller is not initialized");
-    let context = context.lock().expect("Failed to lock Docker controller");
+    let context = e2e_test_suite::get_context();
     
     let (key, address) = create_key_and_address();
 
@@ -83,7 +85,9 @@ fn create_did_document() {
     let msg = json!(create_msg).to_string();
     println!("Message: {msg}");
 
-    let result = context.chain.tx.execute_contract_msg(&address, &context.contract_address, &msg, vec![], &key);
+    let contract_address = context.get_contracts_info().get(CONTRACT_NAME).expect("no contract info").contract_address.clone();
+
+    let result = context.get_chain_client().tx.wasm().execute_contract_msg(&key, &contract_address, &msg, vec![]);
     // let result = context.chain.tx.execute_contract_msg(&address, "c4e14hj2tavq8fpesdwxxcu44rty3hh90vhujrvcmstl4zr3txmfvw9s86dt7n", &msg, vec![], &key);
     
     if result.is_err() {
@@ -95,7 +99,7 @@ fn create_did_document() {
     let query_msg = super::super::contract::sv::QueryMsg::GetDidDocument { did: Did::new(did) };
     let query = json!(query_msg).to_string();
     println!("Query: {query}");
-    let result = context.chain.query.contract(&context.contract_address, &query);
+    let result = context.get_chain_client().query.wasm().contract(&contract_address, &query);
     // if result.is_err() {
     //     assert_eq!("Generic error: Querier contract error: Did document not found", result.err().unwrap().to_string());
     // } else {
@@ -127,7 +131,10 @@ fn my_test_3() {
 }
 
 fn init_suite() {
-    e2e_test_suite::init_suite(MENMONIC, HD_PATH, CONTRACT_PATH, "c4e-chain-e2e-test:v1.4.3", "did-contract", "did");
+    let mut contracts: HashMap<String, ContractInit> = HashMap::new();
+    contracts.insert(CONTRACT_NAME.into(), ContractInit { contract_path: CONTRACT_PATH.to_string(), json_ncoded_init_args: "{}".to_string(), label: "did_contract".to_string() });
+
+    e2e_test_suite::init_suite(MENMONIC, HD_PATH, &contracts, "c4e-chain-e2e-test:v1.4.3", "did-contract", "did");
 }
 
 fn create_key_and_address() -> (SigningKey, String){

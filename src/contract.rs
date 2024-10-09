@@ -15,8 +15,11 @@ pub struct DidContract {
 // TODO responses for msgs
 // TODO response Events
 
-#[entry_points]
+// #[entry_points]
+
+#[cfg_attr(not(feature = "library"), entry_points)]
 #[contract]
+// #[cfg_attr(not(feature = "library"), contract)]
 #[sv::error(ContractError)]
 impl DidContract {
     pub const fn new() -> Self {
