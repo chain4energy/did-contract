@@ -18,6 +18,8 @@ optimize:
 	--mount type=volume,source=registry_cache,target=/usr/local/cargo/registry \
 	cosmwasm/optimizer:0.16.0
 
+	sudo chown -R $$(id -u):$$(id -g) ./artifacts
+
 
 # --user $$(id -u):$$(id -g)
 # docker volume rm empty-contract_cache
