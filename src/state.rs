@@ -2,8 +2,8 @@ use core::fmt;
 use std::collections::HashSet;
 
 use cosmwasm_schema::cw_serde;
-use cosmwasm_std::{Api, StdError, Storage};
-use cw_storage_plus::{Index, IndexList, IndexedMap, Map, MultiIndex};
+use cosmwasm_std::{Api, StdError, StdResult, Storage};
+use cw_storage_plus::{Index, IndexList, IndexedMap, Key, Map, MultiIndex, Prefixer, PrimaryKey};
 use schemars::JsonSchema;
 use serde::{de::{self, SeqAccess, Visitor}, ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
 
@@ -294,8 +294,52 @@ impl Service {
 
 }
  
-#[derive(PartialEq, Debug, Clone, JsonSchema)]
+// #[derive(PartialEq, Debug, Clone, JsonSchema)]
+#[derive(
+    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema,
+)]
 pub struct Did(String);
+
+
+impl cw_storage_plus::KeyDeserialize for Did {
+    type Output = Did;
+
+    const KEY_ELEMS: u16 = 1;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        Ok(Did::new(&String::from_vec(value)?))
+    }
+}
+
+impl cw_storage_plus::KeyDeserialize for &Did {
+    type Output = Did;
+
+    const KEY_ELEMS: u16 = 1;
+
+    #[inline(always)]
+    fn from_vec(value: Vec<u8>) -> StdResult<Self::Output> {
+        Self::Output::from_vec(value)
+    }
+}
+
+
+impl<'a> PrimaryKey<'a> for Did {
+    type Prefix = ();
+    type SubPrefix = ();
+    type Suffix = Self;
+    type SuperSuffix = Self;
+
+    fn key(&self) -> Vec<Key> {
+        vec![Key::Ref(self.as_bytes())]
+    }
+}
+
+impl<'a> Prefixer<'a> for Did {
+    fn prefix(&self) -> Vec<Key> {
+        vec![Key::Ref(self.as_bytes())]
+    }
+}
 
 impl Serialize for Did {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -377,6 +421,25 @@ impl PartialEq<Did> for String {
 impl Did {
     pub fn new(s: &str) -> Self {
         Did(s.to_string())
+    }
+
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+
+    /// Returns the UTF-8 encoded address string as a byte array.
+    ///
+    /// This is equivalent to `address.as_str().as_bytes()`.
+    #[inline]
+    pub fn as_bytes(&self) -> &[u8] {
+        self.0.as_bytes()
+    }
+
+    /// Utility for explicit conversion to `String`.
+    #[inline]
+    pub fn into_string(self) -> String {
+        self.0
     }
 
     // pub fn new_address(s: &str) -> Self {

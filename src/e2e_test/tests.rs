@@ -134,7 +134,7 @@ fn init_suite() {
     let mut contracts: HashMap<String, ContractInit> = HashMap::new();
     contracts.insert(CONTRACT_NAME.into(), ContractInit { contract_path: CONTRACT_PATH.to_string(), json_ncoded_init_args: "{}".to_string(), label: "did_contract".to_string() });
 
-    e2e_test_suite::init_suite(MENMONIC, HD_PATH, &contracts, "c4e-chain-e2e-test:v1.4.3", "did-contract", "did");
+    e2e_test_suite::init_suite(MENMONIC, HD_PATH, &contracts, "c4e-chain-e2e-test:v1.4.3", "did-contract", "did", "chain-node-did");
 }
 
 fn create_key_and_address() -> (SigningKey, String){

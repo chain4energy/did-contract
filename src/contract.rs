@@ -1,8 +1,8 @@
 use cosmwasm_std::{Deps, Order, Response, StdError, StdResult, Storage};
 // use cw_storage_plus::Item;
 use cw_storage_plus::{Bound, Map};
-use sylvia::{contract, entry_points};
-use sylvia::types::{InstantiateCtx, QueryCtx, ExecCtx};
+use sylvia::contract;
+use sylvia::ctx::{InstantiateCtx, QueryCtx, ExecCtx};
 use crate::error::ContractError;
 use crate::multiset::MultiSet;
 use crate::state::{self, Controller, DidDocument, Service, Controllers};
@@ -11,6 +11,9 @@ pub struct DidContract {
     pub did_docs: Map<String, DidDocument>,
     pub controllers: MultiSet, // TODO optimize indexing on controllers
 }
+
+#[cfg(not(feature = "library"))]
+use sylvia::entry_points;
 // TODO update error handling
 // TODO responses for msgs
 // TODO response Events
