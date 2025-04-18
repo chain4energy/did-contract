@@ -1,11 +1,10 @@
 use cw_storage_plus::{Bound, Map};
 use cosmwasm_std::Storage;
 
-/// MultiMap struct that provides an abstraction over the Path-based multi-map
 pub struct MultiSet {
     // Name for the map, used as a base for constructing key paths
     namespace: &'static str,
-    primary_keys: Map<String, bool>
+    primary_keys: Map<String, ()>
 }
 
 impl MultiSet {
@@ -36,13 +35,13 @@ impl MultiSet {
         value: &str
     ) -> Result<(), cosmwasm_std::StdError>  {
         let k = self.create_submap_key(primary_key);
-        let map: Map<String, bool> = Map::new_dyn(k);
+        let map = get_map(&k);
         let empty = map.is_empty(storage);
         // let prefix = self.create_prefix(primary_key); 
         // let map: Map<String, bool> = Map::new_dyn(prefix.);
-        map.save(storage, value.to_string(), &false)?;
+        map.save(storage, value.to_string(), &())?;
         if empty {
-            self.primary_keys.save(storage, primary_key.to_string(), &true)?;
+            self.primary_keys.save(storage, primary_key.to_string(), &())?;
         }
         Ok(())
     }
@@ -55,7 +54,7 @@ impl MultiSet {
         secondary_key: &str,
     ) {
         let k = self.create_submap_key(primary_key);
-        let map: Map<String, bool> = Map::new_dyn(k);
+        let map = get_map(&k);
         map.remove(storage, secondary_key.to_string());
         if map.is_empty(storage) {
             self.primary_keys.remove(storage, primary_key.to_string());
@@ -65,7 +64,7 @@ impl MultiSet {
     // Get all values associated with a primary key by scanning the prefix
     pub fn is_empty(&self, storage: &dyn Storage, primary_key: &str) -> bool {
         let k = self.create_submap_key(primary_key);
-        let map: Map<String, bool> = Map::new_dyn(k);
+        let map = get_map(&k);
         map.is_empty(storage)
     }
 
@@ -95,7 +94,11 @@ impl<'a> MultiSet {
         max: Option<Bound<'a, String>>,
         order: cosmwasm_std::Order,
     ) -> Box<dyn Iterator<Item = Result<String, cosmwasm_std::StdError>> + 'c> {
-        let primary_keys_map: Map<String, bool> = Map::new_dyn(self.namespace);
-        primary_keys_map.keys(storage, min, max, order)
+        // let primary_keys_map: Map<String, bool> = Map::new_dyn(self.namespace);
+        self.primary_keys.keys(storage, min, max, order)
     }
+}
+
+fn get_map(key: &str) -> Map<String, ()> {
+    Map::new_dyn(key.to_string())
 }

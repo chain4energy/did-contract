@@ -5,28 +5,43 @@ use cosmwasm_schema::cw_serde;
 use cosmwasm_std::{Api, StdError, StdResult, Storage};
 use cw_storage_plus::{Index, IndexList, IndexedMap, Key, Map, MultiIndex, Prefixer, PrimaryKey};
 use schemars::JsonSchema;
-use serde::{de::{self, SeqAccess, Visitor}, ser::SerializeSeq, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{
+    de::{self, SeqAccess, Visitor},
+    ser::SerializeSeq,
+    Deserialize, Deserializer, Serialize, Serializer,
+};
 
 use crate::error::ContractError;
 
-pub const DID_PREFIX: &str = "didc4e:c4e:"; // TODO make configurable on contract instatiating
-// const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
+pub const DID_PREFIX: &str = "did:c4e:"; // TODO make configurable on contract instatiating
+                                         // const ADDRESS_DID_PREFIX: &str = constcat!(DID_PREFIX, "address:");
 
 #[cw_serde]
 pub struct DidDocument {
     pub id: Did,
-    #[serde(serialize_with = "serialize_controllers", deserialize_with = "deserialize_controllers")]
+    #[serde(
+        serialize_with = "serialize_controllers",
+        deserialize_with = "deserialize_controllers"
+    )]
     pub controller: Vec<Controller>,
     // pub controller: Controllers,
     pub service: Vec<Service>,
 }
 
 pub(crate) trait Controllers {
-    fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError>;
+    fn ensure_exist(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+    ) -> Result<(), ContractError>;
 }
 
 impl Controllers for Vec<Controller> {
-    fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+    fn ensure_exist(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+    ) -> Result<(), ContractError> {
         for c in self {
             c.ensure_exist(store, did_docs)?;
         }
@@ -36,7 +51,9 @@ impl Controllers for Vec<Controller> {
 
 impl DidDocument {
     pub(crate) fn has_service(&self, service_did: &Did) -> bool {
-        self.service.iter().any(|service| &service.id == service_did)
+        self.service
+            .iter()
+            .any(|service| &service.id == service_did)
     }
 
     // pub fn has_controller(&self, controller: &Controller) -> bool {
@@ -55,14 +72,14 @@ impl DidDocument {
         !self.controller.is_empty()
     }
 
-    pub(crate) fn ensure_controller(&self) -> Result<(), ContractError>  {
+    pub(crate) fn ensure_controller(&self) -> Result<(), ContractError> {
         if !self.has_any_controller() {
-            return Err(ContractError::DidDocumentNoController())
+            return Err(ContractError::DidDocumentNoController());
         }
         Ok(())
     }
 
-    pub(crate) fn ensure_not_self_controlled(&self) -> Result<(), ContractError>  {
+    pub(crate) fn ensure_not_self_controlled(&self) -> Result<(), ContractError> {
         for c in &self.controller {
             if self.id.to_string() == c.to_string() {
                 return Err(ContractError::SelfControlledDidDocumentNotAllowed());
@@ -71,34 +88,50 @@ impl DidDocument {
         Ok(())
     }
 
-    pub(crate) fn ensure_controllers_exist(&self, store: &mut dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+    pub(crate) fn ensure_controllers_exist(
+        &self,
+        store: &mut dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+    ) -> Result<(), ContractError> {
         self.controller.ensure_exist(store, did_docs)
     }
 
-    pub(crate) fn ensure_signability(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+    pub(crate) fn ensure_signability(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+    ) -> Result<(), ContractError> {
         let mut already_checked: HashSet<String> = HashSet::new();
         self.can_be_signed(store, did_docs, &mut already_checked)
     }
 
-    fn can_be_signed(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, already_checked: &mut HashSet<String>) -> Result<(), ContractError> {
-        for c in &self.controller{
+    fn can_be_signed(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+        already_checked: &mut HashSet<String>,
+    ) -> Result<(), ContractError> {
+        for c in &self.controller {
             // for c in self.controller.controllers() {
             if c.is_signable() {
                 return Ok(());
-            } else  {
+            } else {
                 if already_checked.insert(c.to_string()) {
-                    let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
+                    let did_doc_result: Result<DidDocument, StdError> =
+                        did_docs.load(store, c.to_string());
                     match did_doc_result {
                         Ok(did_document) => {
-                            if let Ok(_) = did_document.can_be_signed(store, did_docs, already_checked) {
+                            if let Ok(_) =
+                                did_document.can_be_signed(store, did_docs, already_checked)
+                            {
                                 return Ok(());
                             }
-                        },
+                        }
                         Err(e) => match e {
-                            StdError::NotFound{ .. } => (),
+                            StdError::NotFound { .. } => (),
                             _ => {
                                 return Err(ContractError::DidDocumentError(e));
-                            },
+                            }
                         },
                     }
                 }
@@ -107,21 +140,49 @@ impl DidDocument {
         Err(ContractError::DidDocumentUnsignable())
     }
 
-    pub(crate) fn authorize(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, sender: &Controller) -> Result<(), ContractError> {
+    pub(crate) fn authorize(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+        sender: &Controller,
+    ) -> Result<(), ContractError> {
         if !self.is_controlled_by(store, did_docs, sender)? {
             return Err(ContractError::Unauthorized);
         }
         Ok(())
     }
 
-    pub(crate) fn is_controlled_by(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller) -> Result<bool, ContractError> {
+    pub(crate) fn is_controlled_by(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+        controller: &Controller,
+    ) -> Result<bool, ContractError> {
         let mut already_checked: HashSet<String> = HashSet::new();
-        is_controller_of_internal(store, did_docs, &self.controller, controller, &mut already_checked)
+        is_controller_of_internal(
+            store,
+            did_docs,
+            &self.controller,
+            controller,
+            &mut already_checked,
+        )
         // self.is_controller_internal(store, did_docs, controller, &mut already_checked)
     }
 
-    fn is_controller_internal(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
-        is_controller_of_internal(store, did_docs, &self.controller, controller, already_checked)
+    fn is_controller_internal(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+        controller: &Controller,
+        already_checked: &mut HashSet<String>,
+    ) -> Result<bool, ContractError> {
+        is_controller_of_internal(
+            store,
+            did_docs,
+            &self.controller,
+            controller,
+            already_checked,
+        )
     }
 
     pub fn is_valid(&self, api: &dyn Api) -> bool {
@@ -133,12 +194,11 @@ impl DidDocument {
 
     pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
         self.id.ensure_valid()?;
-        // for c in self.controller.controllers() {
         for c in &self.controller {
             c.ensure_valid(api)?
         }
-        for c in &self.service {
-            c.ensure_valid()?
+        for s in &self.service {
+            s.ensure_valid()?
         }
         Ok(())
     }
@@ -153,32 +213,55 @@ impl DidDocument {
 //     Ok(())
 // }
 
-pub fn is_controller_of(store: &dyn Storage, did_docs: &Map<String, DidDocument>, controllers: &Vec<Controller>, controller: &Controller)  -> Result<bool, ContractError> {
+pub fn is_controller_of(
+    store: &dyn Storage,
+    did_docs: &Map<String, DidDocument>,
+    controllers: &Vec<Controller>,
+    controller: &Controller,
+) -> Result<bool, ContractError> {
     let mut already_checked: HashSet<String> = HashSet::new();
-    is_controller_of_internal(store, did_docs, controllers, controller, &mut already_checked)
+    is_controller_of_internal(
+        store,
+        did_docs,
+        controllers,
+        controller,
+        &mut already_checked,
+    )
 }
 
-fn is_controller_of_internal(store: &dyn Storage, did_docs: &Map<String, DidDocument>, controllers: &Vec<Controller>, controller: &Controller, already_checked: &mut HashSet<String>)  -> Result<bool, ContractError> {
-    for c in controllers{
-    // for c in self.controller.controllers() {
+fn is_controller_of_internal(
+    store: &dyn Storage,
+    did_docs: &Map<String, DidDocument>,
+    controllers: &Vec<Controller>,
+    controller: &Controller,
+    already_checked: &mut HashSet<String>,
+) -> Result<bool, ContractError> {
+    for c in controllers {
+        // for c in self.controller.controllers() {
         if c == controller {
             return Ok(true);
         }
         if c.is_did() {
             if already_checked.insert(c.to_string()) {
-                let did_doc_result: Result<DidDocument, StdError> = did_docs.load(store, c.to_string());
+                let did_doc_result: Result<DidDocument, StdError> =
+                    did_docs.load(store, c.to_string());
                 match did_doc_result {
                     Ok(did_document) => {
-                        let is_controller = did_document.is_controller_internal(store, did_docs, controller, already_checked)?;
+                        let is_controller = did_document.is_controller_internal(
+                            store,
+                            did_docs,
+                            controller,
+                            already_checked,
+                        )?;
                         if is_controller {
                             return Ok(true);
                         }
-                    },
+                    }
                     Err(e) => match e {
-                        StdError::NotFound{ .. } => (),
+                        StdError::NotFound { .. } => (),
                         _ => {
                             return Err(ContractError::DidDocumentError(e));
-                        },
+                        }
                     },
                 }
             }
@@ -243,7 +326,6 @@ where
 }
 pub struct DidDocumentIndexes<'a> {
     pub controller: MultiIndex<'a, String, DidDocument, String>,
-
 }
 
 impl<'a> IndexList<DidDocument> for DidDocumentIndexes<'a> {
@@ -260,7 +342,7 @@ pub fn did_documents<'a>() -> IndexedMap<&'a str, DidDocument, DidDocumentIndexe
             |_pk, d: &DidDocument| d.controller[0].to_string(),
             "dids",
             "did_controller",
-        )
+        ),
     };
     IndexedMap::new("escrows", indexes)
 }
@@ -283,7 +365,6 @@ pub struct Service {
 }
 
 impl Service {
-
     pub fn is_valid(&self) -> bool {
         self.id.is_valid()
     }
@@ -291,15 +372,11 @@ impl Service {
     pub fn ensure_valid(&self) -> Result<(), ContractError> {
         self.id.ensure_valid()
     }
-
 }
- 
-// #[derive(PartialEq, Debug, Clone, JsonSchema)]
-#[derive(
-    Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema,
-)]
-pub struct Did(String);
 
+// #[derive(PartialEq, Debug, Clone, JsonSchema)]
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, JsonSchema)]
+pub struct Did(String);
 
 impl cw_storage_plus::KeyDeserialize for Did {
     type Output = Did;
@@ -323,7 +400,6 @@ impl cw_storage_plus::KeyDeserialize for &Did {
     }
 }
 
-
 impl<'a> PrimaryKey<'a> for Did {
     type Prefix = ();
     type SubPrefix = ();
@@ -344,7 +420,7 @@ impl<'a> Prefixer<'a> for Did {
 impl Serialize for Did {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer
+        S: Serializer,
     {
         serializer.serialize_str(&self.0)
     }
@@ -353,7 +429,7 @@ impl Serialize for Did {
 impl<'de> Deserialize<'de> for Did {
     fn deserialize<D>(deserializer: D) -> Result<Did, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         Ok(Did(s))
@@ -367,25 +443,29 @@ impl<'de> Deserialize<'de> for Did {
 //     }
 // }
 
-impl From<String> for Did { // TODO maybe change to TryFrom<String>
+impl From<String> for Did {
+    // TODO maybe change to TryFrom<String>
     fn from(s: String) -> Self {
         Did::new(&s)
     }
 }
 
-impl From<&String> for Did { // TODO maybe change to TryFrom<String>
+impl From<&String> for Did {
+    // TODO maybe change to TryFrom<String>
     fn from(s: &String) -> Self {
         Did::new(s)
     }
 }
 
-impl From<&str> for Did { // TODO maybe change to TryFrom<String>
+impl From<&str> for Did {
+    // TODO maybe change to TryFrom<String>
     fn from(s: &str) -> Self {
         Did::new(s)
     }
 }
 
-impl From<Did> for String { // TODO maybe change to TryFrom<String>
+impl From<Did> for String {
+    // TODO maybe change to TryFrom<String>
     fn from(s: Did) -> Self {
         s.to_string()
     }
@@ -457,7 +537,7 @@ impl Did {
 
     pub fn ensure_valid(&self) -> Result<(), ContractError> {
         if !self.is_valid() {
-            return Err(ContractError::DidFormatError())
+            return Err(ContractError::DidFormatError());
         }
         Ok(())
     }
@@ -467,14 +547,13 @@ impl Did {
     }
 }
 
-
 #[derive(PartialEq, Debug, Clone, JsonSchema)]
 pub struct Controller(String);
 
 impl Serialize for Controller {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
-        S: Serializer
+        S: Serializer,
     {
         serializer.serialize_str(&self.0)
     }
@@ -483,7 +562,7 @@ impl Serialize for Controller {
 impl<'de> Deserialize<'de> for Controller {
     fn deserialize<D>(deserializer: D) -> Result<Controller, D::Error>
     where
-        D: Deserializer<'de>
+        D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
         Ok(Controller(s))
@@ -509,19 +588,22 @@ impl PartialEq<Controller> for String {
     }
 }
 
-impl From<String> for Controller {  // TODO maybe change to TryFrom<String>
+impl From<String> for Controller {
+    // TODO maybe change to TryFrom<String>
     fn from(s: String) -> Self {
         Controller::new(&s)
     }
 }
 
-impl From<&String> for Controller { // TODO maybe change to TryFrom<String>
+impl From<&String> for Controller {
+    // TODO maybe change to TryFrom<String>
     fn from(s: &String) -> Self {
         Controller::new(s)
     }
 }
 
-impl From<&str> for Controller { // TODO maybe change to TryFrom<String>
+impl From<&str> for Controller {
+    // TODO maybe change to TryFrom<String>
     fn from(s: &str) -> Self {
         Controller::new(s)
     }
@@ -550,7 +632,7 @@ impl Controller {
 
     pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
         if !self.is_valid(api) {
-            return Err(ContractError::ControllerFormatError())
+            return Err(ContractError::ControllerFormatError());
         }
         Ok(())
     }
@@ -565,12 +647,16 @@ impl Controller {
 
     pub fn is_controller(api: &dyn Api, s: &str) -> bool {
         if let Err(_) = api.addr_validate(s) {
-            return Did::is_did(s)
+            return Did::is_did(s);
         }
         true
     }
 
-    pub(crate) fn ensure_exist(&self, store: &dyn Storage, did_docs: &Map<String, DidDocument>) -> Result<(), ContractError> {
+    pub(crate) fn ensure_exist(
+        &self,
+        store: &dyn Storage,
+        did_docs: &Map<String, DidDocument>,
+    ) -> Result<(), ContractError> {
         if self.is_did() {
             if !did_docs.has(store, self.to_string()) {
                 return Err(ContractError::DidControllerNotFound());
@@ -578,80 +664,29 @@ impl Controller {
         }
         Ok(())
     }
-
 }
 
-// #[derive(PartialEq, Debug, Clone, JsonSchema)]
-// pub struct Controllers(pub Vec<Controller>);
+pub(crate) trait ToEventData {
+    fn to_event_data(&self) -> String;
+}
 
-// impl Serialize for Controllers {
-//     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-//     where
-//         S: Serializer
-//     {
+impl ToEventData for Vec<Controller> {
+    fn to_event_data(&self) -> String {
+        self.iter()
+            .map(|c| c.to_string())
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
 
-//         if self.0.len() == 1 {
-//             // If there's only one element, serialize it as a single Controller (not as an array)
-//             serializer.serialize_str(&self.0[0].to_string())
-//         } else {
-//             // Otherwise, serialize as an array of Controllers
-//             let mut seq = serializer.serialize_seq(Some(self.0.len()))?;
-//             for item in &self.0 {
-//                 seq.serialize_element(&item.to_string())?;
-//             }
-//             seq.end()
-//         }
-//     }
-// }
-
-// impl<'de> Deserialize<'de> for Controllers {
-//     fn deserialize<D>(deserializer: D) -> Result<Controllers, D::Error>
-//     where
-//         D: Deserializer<'de>
-//     {
-//         struct ControllerVisitor;
-//         impl<'de> Visitor<'de> for ControllerVisitor {
-//             type Value = Vec<Controller>;
-
-//             fn expecting(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
-//                 formatter.write_str("a string or a sequence of controllers")
-//             }
-
-//             fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-//             where
-//                 E: de::Error,
-//             {
-//                 // If it's a string, wrap it in a Vec
-//                 Ok(vec![Controller(value.to_string())])
-//             }
-
-//             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>
-//             where
-//                 A: SeqAccess<'de>,
-//             {
-//                 let mut controllers = Vec::new();
-//                 while let Some(controller) = seq.next_element()? {
-//                     controllers.push(controller);
-//                 }
-//                 Ok(controllers)
-//             }
-//         }
-
-//         let vec = deserializer.deserialize_any(ControllerVisitor)?;
-//         Ok(Controllers(vec))
-//     }
-// }
-
-
-// impl Controllers {
-//     pub fn controllers(&self) -> &Vec<Controller> {
-//         &self.0
-//     }
-
-//     pub fn mut_controllers(&mut self) -> &mut Vec<Controller> {
-//         &mut self.0
-//     }
-// }
+impl ToEventData for Vec<Service> {
+    fn to_event_data(&self) -> String {
+        self.iter()
+            .map(|s| s.id.to_string())
+            .collect::<Vec<String>>()
+            .join(",")
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -678,7 +713,7 @@ mod tests {
         let serialized_value: serde_json::Value = serde_json::from_str(&serialized).unwrap();
 
         // Compare with expected JSON string
-        assert_eq!(serialized_value , expected_json);
+        assert_eq!(serialized_value, expected_json);
 
         // Deserialize back to struct
         let deserialized: Service = from_str(&serialized).unwrap();
@@ -770,7 +805,10 @@ mod tests {
         let deserialized: DidDocument = from_str(&serialized).unwrap();
         assert_eq!(deserialized.id, Did::new("did1"));
         // assert_eq!(deserialized.controller, Controllers(vec![Controller::new("controller1")]));
-        assert_eq!(deserialized.controller, vec![Controller::new("controller1")]);
+        assert_eq!(
+            deserialized.controller,
+            vec![Controller::new("controller1")]
+        );
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));
         assert_eq!(deserialized.service[0].a_type, "ServiceType1");
@@ -802,7 +840,10 @@ mod tests {
         let did = DidDocument {
             id: Did::new("did1"),
             // controller: Controllers(vec![Controller::new("controller1"), Controller::new("controller2")]),
-            controller: vec![Controller::new("controller1"), Controller::new("controller2")],
+            controller: vec![
+                Controller::new("controller1"),
+                Controller::new("controller2"),
+            ],
             service: vec![service1, service2],
         };
 
@@ -836,7 +877,13 @@ mod tests {
         assert_eq!(deserialized, did);
         assert_eq!(deserialized.id, Did::new("did1"));
         // assert_eq!(deserialized.controller, Controllers(vec![Controller::new("controller1"), Controller::new("controller2")]));
-        assert_eq!(deserialized.controller, vec![Controller::new("controller1"), Controller::new("controller2")]);
+        assert_eq!(
+            deserialized.controller,
+            vec![
+                Controller::new("controller1"),
+                Controller::new("controller2")
+            ]
+        );
         assert_eq!(deserialized.service.len(), 2);
         assert_eq!(deserialized.service[0].id, Did::new("service1"));
         assert_eq!(deserialized.service[0].a_type, "ServiceType1");
