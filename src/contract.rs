@@ -144,6 +144,7 @@ impl DidContract {
         did_doc: DidDocument,
     ) -> Result<Response, ContractError> {
         did_doc.ensure_valid(ctx.deps.api)?;
+        did_doc.ensure_controllers_not_duplicated()?;
         if self
             .did_docs
             .has(ctx.deps.storage, did_doc.id.value().to_string())
@@ -188,9 +189,10 @@ impl DidContract {
     ) -> Result<Response, ContractError> {
         new_did_doc.ensure_valid(ctx.deps.api)?;
         new_did_doc.ensure_controller()?;
+        new_did_doc.ensure_controllers_not_duplicated()?;
         new_did_doc.ensure_not_self_controlled()?;
         let did_doc = self.get_did_doc(ctx.deps.storage, new_did_doc.id.value())?;
-        let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
+        let sender: Controller = ctx.info.sender.to_string().into();
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         new_did_doc.ensure_controllers_exist(ctx.deps.storage, &self.did_docs)?;

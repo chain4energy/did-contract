@@ -50,4 +50,7 @@ pub enum ContractError {
 
     #[error("Did document service not existsr")]
     DidDocumentServiceNotExists,
+
+    #[error("Duplicated controller: {0}")]
+    DuplicatedController(String),
 }

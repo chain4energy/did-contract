@@ -88,6 +88,16 @@ impl DidDocument {
         Ok(())
     }
 
+    pub(crate) fn ensure_controllers_not_duplicated(&self) -> Result<(), ContractError> {
+        let mut seen = HashSet::new();
+        for controller in &self.controller {
+            if !seen.insert(controller.to_string()) {
+                return Err(ContractError::DuplicatedController(controller.to_string()));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn ensure_controllers_exist(
         &self,
         store: &mut dyn Storage,
@@ -609,6 +619,7 @@ impl From<&str> for Controller {
     }
 }
 
+
 // Implement Display to allow conversion from MyStruct to String (automatically implements ToString)
 impl fmt::Display for Controller {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -663,6 +674,11 @@ impl Controller {
             }
         }
         Ok(())
+    }
+
+    
+    pub(crate) fn as_str(&self) -> &str {
+        self.0.as_str()   
     }
 }
 

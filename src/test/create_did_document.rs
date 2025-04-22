@@ -53,3 +53,64 @@ fn create_and_get_document() {
     let did_document = contract.get_did_document(Did::new(&did)).unwrap();
     assert_eq!(new_did_doc.clone(), did_document.clone());
 }
+
+
+#[test]
+fn create_document_with_duplicate_controller() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = format!("{}{}", DID_PREFIX, "new_did");
+    let new_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![
+            owner.to_string().into(),
+            owner.to_string().into(), // Duplicate controller
+        ],
+        service: vec![Service {
+            a_type: "ServiceType".to_string(),
+            id: Did::new(&format!("{}{}", DID_PREFIX, "service1")),
+            service_endpoint: "http://example.com".to_string(),
+        }],
+    };
+
+    let result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_err(), "Expected Err, but got an Ok");
+    assert_eq!(
+        format!("Duplicated controller: {}", owner.to_string()),
+        result.err().unwrap().to_string()
+    );
+}
+
+#[test]
+fn create_document_with_invalid_did_format() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = "invalid_did_format";
+    let new_did_doc = DidDocument {
+        id: Did::new(did),
+        controller: vec![owner.to_string().into()],
+        service: vec![Service {
+            a_type: "ServiceType".to_string(),
+            id: Did::new(&format!("{}{}", DID_PREFIX, "service1")),
+            service_endpoint: "http://example.com".to_string(),
+        }],
+    };
+
+    let result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_err(), "Expected Err, but got an Ok");
+    assert_eq!("Did format error", result.err().unwrap().to_string());
+}
