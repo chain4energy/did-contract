@@ -164,7 +164,8 @@ impl DidContract {
         new_doc.ensure_controllers_exist(ctx.deps.storage, &self.did_docs)?;
         new_doc.ensure_signability(ctx.deps.storage, &self.did_docs)?;
 
-        self.did_docs.save(ctx.deps.storage, new_doc.id.to_string(), &new_doc)
+        self.did_docs
+            .save(ctx.deps.storage, new_doc.id.to_string(), &new_doc)
             .map_err(|e| ContractError::DidDocumentError(e))?;
 
         self.index_controllers(ctx.deps.storage, &new_doc)?;
@@ -200,17 +201,30 @@ impl DidContract {
         new_did_doc.ensure_controllers_exist(ctx.deps.storage, &self.did_docs)?;
         new_did_doc.ensure_signability(ctx.deps.storage, &self.did_docs)?; // TODO maybe optimoze by joining with ensure_controllers_exist
 
-        let r = self
+        self
             .did_docs
-            .save(ctx.deps.storage, new_did_doc.id.to_string(), &new_did_doc);
-        match r {
-            Ok(_) => {
-                self.unindex_controllers(ctx.deps.storage, &did_doc);
-                self.index_controllers(ctx.deps.storage, &new_did_doc)?;
-                Ok(Response::default())
-            }
-            Err(e) => Err(ContractError::DidDocumentError(e)),
+            .save(ctx.deps.storage, new_did_doc.id.to_string(), &new_did_doc)
+            .map_err(|e| ContractError::DidDocumentError(e))?;
+
+        self.unindex_controllers(ctx.deps.storage, &did_doc);
+        self.index_controllers(ctx.deps.storage, &new_did_doc)?;
+
+        let mut response = Response::default();
+
+        let mut event = Event::new("update_did_document")
+            .add_attribute("did", new_did_doc.id.to_string())
+            .add_attribute("old_controllers", did_doc.controller.to_event_data())
+            .add_attribute("new_controllers", new_did_doc.controller.to_event_data());
+
+        if did_doc.service.len() > 0 {
+            event = event.add_attribute("old_services", did_doc.service.to_event_data());
         }
+        if new_did_doc.service.len() > 0 {
+            event = event.add_attribute("new_services", new_did_doc.service.to_event_data());
+        }
+
+        response = response.add_event(event);
+        Ok(response)
     }
 
     #[sv::msg(exec)]
@@ -227,7 +241,9 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_controller(&controller) {
-            return Err(ContractError::DidDocumentControllerAlreadyExists(controller.to_string()));
+            return Err(ContractError::DidDocumentControllerAlreadyExists(
+                controller.to_string(),
+            ));
         }
 
         did_doc.controller.push(controller.clone());
@@ -261,7 +277,9 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_controller(&controller) {
-            return Err(ContractError::DidDocumentControllerNotExists(controller.to_string()));
+            return Err(ContractError::DidDocumentControllerNotExists(
+                controller.to_string(),
+            ));
         }
 
         // did_doc.controller.mut_controllers().retain(|s| *s != controller);
@@ -295,7 +313,9 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_service(&service.id) {
-            return Err(ContractError::DidDocumentServiceAlreadyExists(service.id.to_string()));
+            return Err(ContractError::DidDocumentServiceAlreadyExists(
+                service.id.to_string(),
+            ));
         }
 
         did_doc.service.push(service);
@@ -323,7 +343,9 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_service(&service_did) {
-            return Err(ContractError::DidDocumentServiceNotExists(service_did.to_string()));
+            return Err(ContractError::DidDocumentServiceNotExists(
+                service_did.to_string(),
+            ));
         }
 
         did_doc.service.retain(|s| s.id != service_did);
@@ -488,52 +510,6 @@ mod tests {
         );
     }
 
-    #[test]
-    fn create_and_get_document() {
-        let app = App::default();
-        let code_id = CodeId::store_code(&app);
-
-        let owner = "owner".into_addr();
-
-        let contract = code_id.instantiate().call(&owner).unwrap();
-
-        // let did_owner = "did_owner";
-        let did = "new_did";
-        let mut new_did_doc = DidDocument {
-            id: Did::new(did),
-            controller: vec![owner.to_string().into()],
-            // controller: Controllers(vec![owner.to_string().into()]),
-            service: vec![Service {
-                a_type: "".to_string(),
-                id: Did::new("dfdsfs"),
-                service_endpoint: "dfdsfs".to_string(),
-            }],
-        };
-        let result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner);
-        assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!("Did format error", result.err().unwrap().to_string());
-
-        let did = format!("{}{}", DID_PREFIX, "new_did");
-        new_did_doc.id = Did::new(&did);
-
-        let result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner);
-        assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!("Did format error", result.err().unwrap().to_string());
-
-        new_did_doc.service[0].id = Did::new(&format!("{}{}", DID_PREFIX, "ffffff"));
-
-        let result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner);
-        assert!(result.is_ok(), "Expected Ok, but got an Err");
-
-        let did_document = contract.get_did_document(Did::new(&did)).unwrap();
-        assert_eq!(new_did_doc.clone(), did_document.clone());
-    }
 
     #[test]
     fn get_controlled_dids() {

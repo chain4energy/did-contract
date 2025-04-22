@@ -608,3 +608,99 @@ fn create_document_with_other_did_as_controller() {
     // Verify that the rest of the document matches
     assert_eq!(did_document.service, new_did_doc.service);
 }
+
+#[test]
+fn create_did_document_with_index_verification() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+    let controller2 = "controller2".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = format!("{}{}", DID_PREFIX, "indexed_did");
+    let service_did = format!("{}{}", DID_PREFIX, "service1");
+    let new_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![owner.to_string().into(), controller2.to_string().into()],
+        service: vec![Service {
+            a_type: "ServiceType".to_string(),
+            id: Did::new(&service_did),
+            service_endpoint: "http://example.com".to_string(),
+        }],
+    };
+
+    // Create the DID Document
+    let result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    // Verify that the DID is indexed under the first controller
+    let controlled_dids = contract
+        .get_controlled_dids(owner.to_string().into(), None, None)
+        .unwrap();
+    assert_eq!(
+        controlled_dids,
+        vec![did.clone().into()],
+        "Expected the DID to be indexed under the first controller"
+    );
+
+    // Verify that the DID is indexed under the second controller
+    let controlled_dids = contract
+        .get_controlled_dids(controller2.to_string().into(), None, None)
+        .unwrap();
+    assert_eq!(
+        controlled_dids,
+        vec![did.clone().into()],
+        "Expected the DID to be indexed under the second controller"
+    );
+
+    // Verify the created DID Document
+    let created_did_doc = contract.get_did_document(Did::new(&did)).unwrap();
+    assert_eq!(
+        new_did_doc, created_did_doc,
+        "DID Document was not created correctly"
+    );
+}
+
+#[test]
+fn create_did_document_with_no_services() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = format!("{}{}", DID_PREFIX, "no_services_did");
+    let new_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![owner.to_string().into()], // Single controller
+        service: vec![], // No services
+    };
+
+    // Create the DID Document
+    let result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    // Verify the created DID Document
+    let created_did_doc = contract.get_did_document(Did::new(&did)).unwrap();
+    assert_eq!(
+        new_did_doc, created_did_doc,
+        "DID Document was not created correctly"
+    );
+
+    // Verify that the DID is indexed under the controller
+    let controlled_dids = contract
+        .get_controlled_dids(owner.to_string().into(), None, None)
+        .unwrap();
+    assert_eq!(
+        controlled_dids,
+        vec![did.clone().into()],
+        "Expected the DID to be indexed under the controller"
+    );
+}
