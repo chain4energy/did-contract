@@ -149,7 +149,9 @@ impl DidContract {
             .did_docs
             .has(ctx.deps.storage, did_doc.id.value().to_string())
         {
-            return Err(ContractError::DidDocumentAlreadyExists);
+            return Err(ContractError::DidDocumentAlreadyExists(
+                did_doc.id.value().to_string(),
+            ));
         }
         let mut new_doc = did_doc;
         if !new_doc.has_any_controller() {
@@ -225,7 +227,7 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_controller(&controller) {
-            return Err(ContractError::DidDocumentControllerAlreadyExists);
+            return Err(ContractError::DidDocumentControllerAlreadyExists(controller.to_string()));
         }
 
         did_doc.controller.push(controller.clone());
@@ -259,7 +261,7 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_controller(&controller) {
-            return Err(ContractError::DidDocumentControllerNotExists);
+            return Err(ContractError::DidDocumentControllerNotExists(controller.to_string()));
         }
 
         // did_doc.controller.mut_controllers().retain(|s| *s != controller);
@@ -293,7 +295,7 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if did_doc.has_service(&service.id) {
-            return Err(ContractError::DidDocumentServiceAlreadyExists);
+            return Err(ContractError::DidDocumentServiceAlreadyExists(service.id.to_string()));
         }
 
         did_doc.service.push(service);
@@ -321,7 +323,7 @@ impl DidContract {
         did_doc.authorize(ctx.deps.storage, &self.did_docs, &sender)?;
 
         if !did_doc.has_service(&service_did) {
-            return Err(ContractError::DidDocumentServiceNotExists);
+            return Err(ContractError::DidDocumentServiceNotExists(service_did.to_string()));
         }
 
         did_doc.service.retain(|s| s.id != service_did);

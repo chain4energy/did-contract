@@ -74,7 +74,7 @@ impl DidDocument {
 
     pub(crate) fn ensure_controller(&self) -> Result<(), ContractError> {
         if !self.has_any_controller() {
-            return Err(ContractError::DidDocumentNoController());
+            return Err(ContractError::DidDocumentNoController(self.id.to_string()));
         }
         Ok(())
     }
@@ -82,7 +82,7 @@ impl DidDocument {
     pub(crate) fn ensure_not_self_controlled(&self) -> Result<(), ContractError> {
         for c in &self.controller {
             if self.id.to_string() == c.to_string() {
-                return Err(ContractError::SelfControlledDidDocumentNotAllowed());
+                return Err(ContractError::SelfControlledDidDocumentNotAllowed(self.id.to_string()));
             }
         }
         Ok(())
@@ -147,7 +147,7 @@ impl DidDocument {
                 }
             }
         }
-        Err(ContractError::DidDocumentUnsignable())
+        Err(ContractError::DidDocumentUnsignable(self.id.to_string()))
     }
 
     pub(crate) fn authorize(
@@ -157,7 +157,7 @@ impl DidDocument {
         sender: &Controller,
     ) -> Result<(), ContractError> {
         if !self.is_controlled_by(store, did_docs, sender)? {
-            return Err(ContractError::Unauthorized);
+            return Err(ContractError::Unauthorized(sender.to_string()));
         }
         Ok(())
     }
@@ -380,7 +380,9 @@ impl Service {
     }
 
     pub fn ensure_valid(&self) -> Result<(), ContractError> {
-        self.id.ensure_valid()
+        self.id.ensure_valid().map_err(|e| {
+            ContractError::ServiceIdFormatError(e.to_string())
+        })
     }
 }
 
@@ -547,7 +549,7 @@ impl Did {
 
     pub fn ensure_valid(&self) -> Result<(), ContractError> {
         if !self.is_valid() {
-            return Err(ContractError::DidFormatError());
+            return Err(ContractError::DidFormatError(self.0.clone()));
         }
         Ok(())
     }
@@ -643,7 +645,7 @@ impl Controller {
 
     pub fn ensure_valid(&self, api: &dyn Api) -> Result<(), ContractError> {
         if !self.is_valid(api) {
-            return Err(ContractError::ControllerFormatError());
+            return Err(ContractError::ControllerFormatError(self.0.clone()));
         }
         Ok(())
     }
@@ -670,7 +672,7 @@ impl Controller {
     ) -> Result<(), ContractError> {
         if self.is_did() {
             if !did_docs.has(store, self.to_string()) {
-                return Err(ContractError::DidControllerNotFound());
+                return Err(ContractError::DidControllerNotFound(self.0.clone()));
             }
         }
         Ok(())
