@@ -6,3 +6,9 @@ mod update_did_document;
 
 #[cfg(test)]
 mod add_controller;
+
+#[cfg(test)]
+mod delete_controller;
+
+#[cfg(test)]
+mod add_service;

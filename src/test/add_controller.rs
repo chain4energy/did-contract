@@ -453,3 +453,81 @@ fn add_controller_with_index_verification() {
         "DID Document was not updated correctly"
     );
 }
+
+#[test]
+fn add_as_did_controller_success() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+    let owner2 = "owner2".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    // Create the first DID Document (controller DID)
+    let controller_did = format!("{}{}", DID_PREFIX, "controller_did");
+    let controller_did_doc = DidDocument {
+        id: Did::new(&controller_did),
+        controller: vec![owner.to_string().into()], // Normal address as controller
+        service: vec![],
+    };
+
+    let result = contract
+        .create_did_document(controller_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    // Create the second DID Document
+    let did = format!("{}{}", DID_PREFIX, "main_did");
+    let mut original_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![controller_did.clone().into()],
+        service: vec![],
+    };
+
+    let result = contract
+        .create_did_document(original_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    let result = contract
+        .add_controller(Did::new(&did), Controller::new(&owner2.to_string()))
+        .call(&owner);
+    // if result.is_err() {
+    //     println!("Error: {}", result.err().unwrap());
+    //     return;
+    // }
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    // Check the emitted events
+    let res = result.expect("Failed to get result");
+
+    assert_eq!(res.events.len(), 2);
+
+    assert_eq!(res.events[0].attributes.len(), 1);
+
+    assert_eq!(res.events[0].ty, "execute");
+    assert_eq!(res.events[0].attributes[0].key, "_contract_address");
+    assert_eq!(
+        res.events[0].attributes[0].value,
+        contract.contract_addr.to_string()
+    );
+
+    assert_eq!(res.events[1].attributes.len(), 3);
+
+    assert_eq!(res.events[1].ty, "wasm-add_controller");
+    assert_eq!(res.events[1].attributes[0].key, "_contract_address");
+    assert_eq!(
+        res.events[1].attributes[0].value,
+        contract.contract_addr.to_string()
+    );
+    assert_eq!(res.events[1].attributes[1].key, "did");
+    assert_eq!(res.events[1].attributes[1].value, did.to_string());
+    assert_eq!(res.events[1].attributes[2].key, "new_controller");
+    assert_eq!(res.events[1].attributes[2].value, owner2.to_string());
+
+    // Verify the updated DID Document
+    original_did_doc.controller.push(Controller::new(&owner2.to_string()));
+    let updated_did_doc = contract.get_did_document(Did::new(&did)).unwrap();
+    assert_eq!(original_did_doc, updated_did_doc, "DID Document was not updated correctly");
+}

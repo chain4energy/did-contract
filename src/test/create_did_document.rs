@@ -704,3 +704,45 @@ fn create_did_document_with_no_services() {
         "Expected the DID to be indexed under the controller"
     );
 }
+
+#[test]
+fn create_document_with_duplicated_service() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = format!("{}{}", DID_PREFIX, "duplicated_service_did");
+    let service_id = format!("{}{}", DID_PREFIX, "service1");
+
+    let new_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![owner.to_string().into()],
+        service: vec![
+            Service {
+                a_type: "ServiceType".to_string(),
+                id: Did::new(&service_id),
+                service_endpoint: "http://example.com".to_string(),
+            },
+            Service {
+                a_type: "ServiceType".to_string(),
+                id: Did::new(&service_id), // Duplicate service ID
+                service_endpoint: "http://example.com".to_string(),
+            },
+        ],
+    };
+
+    // Attempt to create the DID Document
+    let result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_err(), "Expected Err, but got an Ok");
+
+    // Verify the error message
+    assert_eq!(
+        format!("Duplicated service: {}", service_id),
+        result.err().unwrap().to_string()
+    );
+}

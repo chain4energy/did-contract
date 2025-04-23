@@ -98,6 +98,16 @@ impl DidDocument {
         Ok(())
     }
 
+    pub(crate) fn ensure_services_not_duplicated(&self) -> Result<(), ContractError> {
+        let mut seen = HashSet::new();
+        for service in &self.service {
+            if !seen.insert(service.id.to_string()) {
+                return Err(ContractError::DuplicatedService(service.id.to_string()));
+            }
+        }
+        Ok(())
+    }
+
     pub(crate) fn ensure_controllers_exist(
         &self,
         store: &mut dyn Storage,

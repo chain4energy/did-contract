@@ -54,6 +54,9 @@ pub enum ContractError {
     #[error("Duplicated controller: {0}")]
     DuplicatedController(String),
 
+    #[error("Duplicated service: {0}")]
+    DuplicatedService(String),
+
     #[error("Service id format error: {0}")]
     ServiceIdFormatError(String),
 }

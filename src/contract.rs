@@ -145,6 +145,7 @@ impl DidContract {
     ) -> Result<Response, ContractError> {
         did_doc.ensure_valid(ctx.deps.api)?;
         did_doc.ensure_controllers_not_duplicated()?;
+        did_doc.ensure_services_not_duplicated()?;
         if self
             .did_docs
             .has(ctx.deps.storage, did_doc.id.value().to_string())
@@ -193,6 +194,7 @@ impl DidContract {
         new_did_doc.ensure_valid(ctx.deps.api)?;
         new_did_doc.ensure_controller()?;
         new_did_doc.ensure_controllers_not_duplicated()?;
+        new_did_doc.ensure_services_not_duplicated()?;
         new_did_doc.ensure_not_self_controlled()?;
         let did_doc = self.get_did_doc(ctx.deps.storage, new_did_doc.id.value())?;
         let sender: Controller = ctx.info.sender.to_string().into();
@@ -289,18 +291,22 @@ impl DidContract {
         did_doc.ensure_controller()?;
         did_doc.ensure_signability(ctx.deps.storage, &self.did_docs)?;
 
-        let r = self
-            .did_docs
-            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
-        match r {
-            Ok(_) => {
-                self.unindex_controller(ctx.deps.storage, &did, &controller);
-                Ok(Response::default())
-            }
-            Err(e) => Err(ContractError::DidDocumentError(e)),
-        }
+        self.did_docs
+            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc)
+            .map_err(|e| ContractError::DidDocumentError(e))?;
+
+        self.unindex_controller(ctx.deps.storage, &did, &controller);
+
+        let mut response = Response::default();
+
+        let event = Event::new("delete_controller")
+            .add_attribute("did", did.to_string())
+            .add_attribute("old_controller", controller.to_string());
+        response = response.add_event(event);
+        Ok(response)
     }
 
+    #[sv::msg(exec)]
     pub fn add_service(
         &self,
         ctx: ExecCtx,
@@ -320,17 +326,22 @@ impl DidContract {
             ));
         }
 
-        did_doc.service.push(service);
+        did_doc.service.push(service.clone());
 
-        let r = self
+        self
             .did_docs
-            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
-        match r {
-            Ok(_) => Ok(Response::default()),
-            Err(e) => Err(ContractError::DidDocumentError(e)),
-        }
+            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc).map_err(|e| ContractError::DidDocumentError(e))?;
+        
+        let mut response = Response::default();
+
+        let event = Event::new("add_service")
+            .add_attribute("did", did.to_string())
+            .add_attribute("new_service", service.id.to_string());
+        response = response.add_event(event);
+        Ok(response)
     }
 
+    #[sv::msg(exec)]
     pub fn delete_service(
         &self,
         ctx: ExecCtx,
@@ -352,13 +363,17 @@ impl DidContract {
 
         did_doc.service.retain(|s| s.id != service_did);
 
-        let r = self
+        self
             .did_docs
-            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
-        match r {
-            Ok(_) => Ok(Response::default()),
-            Err(e) => Err(ContractError::DidDocumentError(e)),
-        }
+            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc).map_err(|e| ContractError::DidDocumentError(e))?;
+        
+        let mut response = Response::default();
+
+        let event = Event::new("delete_service")
+            .add_attribute("did", did.to_string())
+            .add_attribute("old_service", service_did);
+        response = response.add_event(event);
+        Ok(response)
     }
 
     #[sv::msg(exec)]

@@ -1078,3 +1078,58 @@ fn update_did_document_remove_service() {
         "Expected no services to remain"
     );
 }
+
+#[test]
+fn update_document_with_duplicated_service() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    let did = format!("{}{}", DID_PREFIX, "duplicated_service_did");
+    let service_id = format!("{}{}", DID_PREFIX, "service1");
+
+    // Create the original DID Document
+    let original_did_doc = DidDocument {
+        id: Did::new(&did),
+        controller: vec![owner.to_string().into()],
+        service: vec![Service {
+            a_type: "ServiceType".to_string(),
+            id: Did::new(&service_id),
+            service_endpoint: "http://example.com".to_string(),
+        }],
+    };
+
+    let result = contract
+        .create_did_document(original_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    // Attempt to update the DID Document with duplicated services
+    let mut updated_did_doc = original_did_doc.clone();
+    updated_did_doc.service.push(Service {
+        a_type: "ServiceType".to_string(),
+        id: Did::new(&service_id), // Duplicate service ID
+        service_endpoint: "http://example.com".to_string(),
+    });
+
+    let result = contract
+        .update_did_document(updated_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_err(), "Expected Err, but got an Ok");
+
+    // Verify the error message
+    assert_eq!(
+        format!("Duplicated service: {}", service_id),
+        result.err().unwrap().to_string()
+    );
+
+    // Verify that the DID Document was not updated
+    let current_did_doc = contract.get_did_document(Did::new(&did)).unwrap();
+    assert_eq!(
+        original_did_doc, current_did_doc,
+        "DID Document was updated incorrectly"
+    );
+}
