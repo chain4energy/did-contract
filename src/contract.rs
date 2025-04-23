@@ -381,7 +381,7 @@ impl DidContract {
         did.ensure_valid()?;
         let did_doc: DidDocument = self.get_did_doc(ctx.deps.storage, did.value())?;
         if !self.controllers.is_empty(ctx.deps.storage, did.value()) {
-            return Err(ContractError::DidDocumentIsController());
+            return Err(ContractError::DidDocumentIsController(did.to_string()));
         }
         let sender: Controller = ctx.info.sender.to_string().into(); // Get sender's address as a string
 
@@ -389,7 +389,12 @@ impl DidContract {
 
         self.did_docs.remove(ctx.deps.storage, did.to_string());
         self.unindex_controllers(ctx.deps.storage, &did_doc);
-        Ok(Response::default())
+        let mut response = Response::default();
+
+        let event = Event::new("delete_did_document")
+            .add_attribute("did", did.to_string());
+        response = response.add_event(event);
+        Ok(response)
     }
 
     fn get_did_doc(&self, store: &dyn Storage, did: &str) -> Result<DidDocument, ContractError> {
@@ -820,146 +825,6 @@ mod tests {
         assert!(is_controller.unwrap(), "Expected true, but got false");
     }
 
-    #[test]
-    fn replacing_document() {
-        let app = App::default();
-        let code_id = CodeId::store_code(&app);
+   
 
-        let owner = "owner".into_addr();
-
-        let contract = code_id.instantiate().call(&owner).unwrap();
-
-        // let did_owner = "did_owner";
-        let did = &format!("{}{}", DID_PREFIX, "new_did");
-        let mut new_did_doc = DidDocument {
-            id: Did::new(did),
-            // controller: Controllers(vec![owner.to_string().into()]),
-            controller: vec![owner.to_string().into()],
-            service: vec![Service {
-                a_type: "".to_string(),
-                id: Did::new(&format!("{}{}", DID_PREFIX, "dfdsfs")),
-                service_endpoint: "dfdsfs".to_string(),
-            }],
-        };
-        let mut result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner);
-        assert!(result.is_ok(), "Expected Ok, but got an Err");
-
-        new_did_doc = DidDocument {
-            id: Did::new(did),
-            // controller: Controllers(vec![owner.to_string().into()]),
-            controller: vec![owner.to_string().into()],
-            service: vec![Service {
-                a_type: "".to_string(),
-                id: Did::new(&format!("{}{}", DID_PREFIX, "AAAA")),
-                service_endpoint: "BBBBB".to_string(),
-            }],
-        };
-
-        result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner);
-        assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!(
-            "Did document already exists",
-            result.err().unwrap().to_string()
-        );
-    }
-
-    #[test]
-    fn delete_did_document_not_found() {
-        let app = App::default();
-        let code_id = CodeId::store_code(&app);
-
-        let owner = "owner".into_addr();
-
-        let contract = code_id.instantiate().call(&owner).unwrap();
-
-        let did = &format!("{}{}", DID_PREFIX, "did");
-        let no_did = contract.delete_did_document(Did::new(did)).call(&owner);
-        assert!(no_did.is_err(), "Expected Err, but got an Ok");
-        assert_eq!("Did document not found", no_did.err().unwrap().to_string());
-    }
-
-    #[test]
-    fn delete_did_document() {
-        let app = App::default();
-        let code_id = CodeId::store_code(&app);
-
-        // let did_owner = "did_owner";
-        let owner_addr = "did_owner".into_addr();
-
-        let contract = code_id.instantiate().call(&owner_addr).unwrap();
-
-        // let did_owner = "did_owner";
-        let did = &format!("{}{}", DID_PREFIX, "new_did");
-        let new_did_doc = DidDocument {
-            id: Did::new(did),
-            // controller: Controllers(vec![owner_addr.to_string().into()]),
-            controller: vec![owner_addr.to_string().into()],
-            service: vec![Service {
-                a_type: "".to_string(),
-                id: Did::new(&format!("{}{}", DID_PREFIX, "dfdsfs")),
-                service_endpoint: "dfdsfs".to_string(),
-            }],
-        };
-        let result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner_addr);
-        assert!(result.is_ok(), "Expected Ok, but got an Err");
-
-        let did_document = contract.get_did_document(Did::new(did)).unwrap();
-        assert_eq!(new_did_doc.clone(), did_document.clone());
-
-        let result = contract
-            .delete_did_document(Did::new(did))
-            .call(&owner_addr);
-        assert!(result.is_ok(), "Expected Ok, but got an Err");
-
-        let result = contract.get_did_document(Did::new(did));
-        assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!(
-            "Generic error: Querier contract error: Did document not found",
-            result.err().unwrap().to_string()
-        );
-    }
-
-    #[test]
-    fn delete_did_document_wrong_owner() {
-        let app = App::default();
-        let code_id = CodeId::store_code(&app);
-
-        // let did_owner = "did_owner";
-        let owner_addr = "did_owner".into_addr();
-        let wrong_owner_addr = "wrong_did_owner".into_addr();
-
-        let contract = code_id.instantiate().call(&owner_addr).unwrap();
-
-        // let did_owner = "did_owner";
-        let did = &format!("{}{}", DID_PREFIX, "new_did");
-        let new_did_doc = DidDocument {
-            id: Did::new(did),
-            // controller: Controllers(vec![owner_addr.to_string().into()]),
-            controller: vec![owner_addr.to_string().into()],
-            service: vec![Service {
-                a_type: "".to_string(),
-                id: Did::new(&format!("{}{}", DID_PREFIX, "dfdsfs")),
-                service_endpoint: "dfdsfs".to_string(),
-            }],
-        };
-        let result = contract
-            .create_did_document(new_did_doc.clone())
-            .call(&owner_addr);
-        assert!(result.is_ok(), "Expected Ok, but got an Err");
-
-        let did_document = contract.get_did_document(Did::new(did)).unwrap();
-        assert_eq!(new_did_doc.clone(), did_document.clone());
-
-        let result = contract
-            .delete_did_document(Did::new(did))
-            .call(&wrong_owner_addr);
-        assert!(result.is_err(), "Expected Err, but got an Ok");
-        assert_eq!("Unauthorized", result.err().unwrap().to_string());
-    }
 }

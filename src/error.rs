@@ -30,8 +30,8 @@ pub enum ContractError {
     #[error("Did document unsignable: {0}")]
     DidDocumentUnsignable(String),
     
-    #[error("Did document is controller")]
-    DidDocumentIsController(),
+    #[error("Did is controller of another document: {0}")]
+    DidDocumentIsController(String),
 
     #[error("Did document already exists: {0}")]
     DidDocumentAlreadyExists(String),

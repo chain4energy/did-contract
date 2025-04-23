@@ -15,3 +15,6 @@ mod add_service;
 
 #[cfg(test)]
 mod delete_service;
+
+#[cfg(test)]
+mod delete_did_document;

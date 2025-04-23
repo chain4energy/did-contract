@@ -746,3 +746,50 @@ fn create_document_with_duplicated_service() {
         result.err().unwrap().to_string()
     );
 }
+
+#[test]
+fn replacing_document() {
+    let app = App::default();
+    let code_id = CodeId::store_code(&app);
+
+    let owner = "owner".into_addr();
+
+    let contract = code_id.instantiate().call(&owner).unwrap();
+
+    // let did_owner = "did_owner";
+    let did = &format!("{}{}", DID_PREFIX, "new_did");
+    let mut new_did_doc = DidDocument {
+        id: Did::new(did),
+        // controller: Controllers(vec![owner.to_string().into()]),
+        controller: vec![owner.to_string().into()],
+        service: vec![Service {
+            a_type: "".to_string(),
+            id: Did::new(&format!("{}{}", DID_PREFIX, "dfdsfs")),
+            service_endpoint: "dfdsfs".to_string(),
+        }],
+    };
+    let mut result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_ok(), "Expected Ok, but got an Err");
+
+    new_did_doc = DidDocument {
+        id: Did::new(did),
+        // controller: Controllers(vec![owner.to_string().into()]),
+        controller: vec![owner.to_string().into()],
+        service: vec![Service {
+            a_type: "".to_string(),
+            id: Did::new(&format!("{}{}", DID_PREFIX, "AAAA")),
+            service_endpoint: "BBBBB".to_string(),
+        }],
+    };
+
+    result = contract
+        .create_did_document(new_did_doc.clone())
+        .call(&owner);
+    assert!(result.is_err(), "Expected Err, but got an Ok");
+    assert_eq!(
+        format!("Did document already exists: {}", did),
+        result.err().unwrap().to_string()
+    );
+}
