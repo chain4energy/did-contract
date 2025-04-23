@@ -12,6 +12,9 @@ pub enum ContractError {
     #[error("Controller format error: {0}")]
     ControllerFormatError(String),
 
+    #[error("No controllers")]
+    NoControllers,
+
     #[error("Did document not found: {0}")]
     DidDocumentNotFound(StdError),
 
