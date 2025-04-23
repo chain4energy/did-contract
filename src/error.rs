@@ -24,7 +24,7 @@ pub enum ContractError {
     #[error("Self controlled did document not allowed: {0}")]
     SelfControlledDidDocumentNotAllowed(String),
 
-    #[error("Did document error")]
+    #[error("Did document error: {0}")]
     DidDocumentError(StdError),
 
     #[error("Did document unsignable: {0}")]
@@ -48,7 +48,7 @@ pub enum ContractError {
     #[error("Did document service already exists: {0}")]
     DidDocumentServiceAlreadyExists(String),
 
-    #[error("Did document service does not exist")]
+    #[error("Did document service does not exist: {0}")]
     DidDocumentServiceNotExists(String),
 
     #[error("Duplicated controller: {0}")]

@@ -1,10 +1,9 @@
-use cw_storage_plus::Map;
 use sylvia::cw_multi_test::IntoAddr;
 use sylvia::multitest::App;
 
 use crate::{
     contract::sv::mt::{CodeId, DidContractProxy},
-    state::{Controller, Did, DidDocument, Service, DID_PREFIX},
+    state::{Controller, Did, DidDocument, DID_PREFIX},
 };
 
 #[test]

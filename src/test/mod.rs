@@ -12,3 +12,6 @@ mod delete_controller;
 
 #[cfg(test)]
 mod add_service;
+
+#[cfg(test)]
+mod delete_service;

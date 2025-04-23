@@ -688,10 +688,6 @@ impl Controller {
         Ok(())
     }
 
-    
-    pub(crate) fn as_str(&self) -> &str {
-        self.0.as_str()   
-    }
 }
 
 pub(crate) trait ToEventData {

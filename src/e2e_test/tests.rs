@@ -26,7 +26,7 @@ fn create_did_document() {
 
     let context = e2e_test_suite::get_context();
     
-    let (key, address) = create_key_and_address();
+    let (key, _address) = create_key_and_address();
 
     // let msg = r#"{
     //     "create_did_document": {
