@@ -201,8 +201,7 @@ impl DidContract {
         new_did_doc.ensure_controllers_exist(ctx.deps.storage, &self.did_docs)?;
         new_did_doc.ensure_signability(ctx.deps.storage, &self.did_docs)?; // TODO maybe optimoze by joining with ensure_controllers_exist
 
-        self
-            .did_docs
+        self.did_docs
             .save(ctx.deps.storage, new_did_doc.id.to_string(), &new_did_doc)
             .map_err(|e| ContractError::DidDocumentError(e))?;
 
@@ -251,16 +250,19 @@ impl DidContract {
 
         controller.ensure_exist(ctx.deps.storage, &self.did_docs)?;
 
-        let r = self
-            .did_docs
-            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc);
-        match r {
-            Ok(_) => {
-                self.index_controller(ctx.deps.storage, &did, &controller)?;
-                Ok(Response::default())
-            }
-            Err(e) => Err(ContractError::DidDocumentError(e)),
-        }
+        self.did_docs
+            .save(ctx.deps.storage, did_doc.id.to_string(), &did_doc)
+            .map_err(|e| ContractError::DidDocumentError(e))?;
+
+        self.index_controller(ctx.deps.storage, &did, &controller)?;
+
+        let mut response = Response::default();
+
+        let event = Event::new("add_controller")
+            .add_attribute("did", did.to_string())
+            .add_attribute("new_controller", controller.to_string());
+        response = response.add_event(event);
+        Ok(response)
     }
 
     #[sv::msg(exec)]
@@ -509,7 +511,6 @@ mod tests {
             no_did.err().unwrap().to_string()
         );
     }
-
 
     #[test]
     fn get_controlled_dids() {
