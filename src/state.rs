@@ -690,7 +690,7 @@ impl Controller {
 
 }
 
-pub(crate) trait ToEventData {
+pub trait ToEventData {
     fn to_event_data(&self) -> String;
 }
 
