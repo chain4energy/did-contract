@@ -1,10 +1,10 @@
 use cw_storage_plus::{Bound, Map};
-use cosmwasm_std::Storage;
+use cosmwasm_std::{Empty, Storage};
 
 pub struct MultiSet {
     // Name for the map, used as a base for constructing key paths
     namespace: &'static str,
-    primary_keys: Map<String, ()>
+    primary_keys: Map<String, Empty>
 }
 
 impl MultiSet {
@@ -41,7 +41,7 @@ impl MultiSet {
         // let map: Map<String, bool> = Map::new_dyn(prefix.);
         map.save(storage, value.to_string(), &())?;
         if empty {
-            self.primary_keys.save(storage, primary_key.to_string(), &())?;
+            self.primary_keys.save(storage, primary_key.to_string(), &Empty {})?;
         }
         Ok(())
     }
