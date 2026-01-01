@@ -1,0 +1,31 @@
+{
+	"folders": [
+		{
+			"name": "detrack-worker-node",
+			"path": "../detrack-worker-node"
+		},
+		{
+			"name": "detrack-gateway",
+			"path": "../detrack-gateway"
+		},
+		{
+			"name": "detrack-node-contract",
+			"path": "../detrack-node-contract"
+		},
+		{
+			"name": "linkage-contract",
+			"path": "../linkage-contract"
+		},
+		{
+			"name": "did-contract",
+			"path": "."
+		},
+		{
+			"name": "escrow-contract",
+			"path": "../escrow-contract"
+		}
+	],
+	"settings": {
+		"liveServer.settings.multiRootWorkspaceName": "escrow-contract"
+	}
+}
