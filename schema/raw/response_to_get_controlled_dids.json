@@ -1,0 +1,13 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Array_of_Did",
+  "type": "array",
+  "items": {
+    "$ref": "#/definitions/Did"
+  },
+  "definitions": {
+    "Did": {
+      "type": "string"
+    }
+  }
+}

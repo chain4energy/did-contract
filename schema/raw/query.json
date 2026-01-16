@@ -1,0 +1,210 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QueryMsg",
+  "anyOf": [
+    {
+      "$ref": "#/definitions/QueryMsg"
+    }
+  ],
+  "definitions": {
+    "Controller": {
+      "type": "string"
+    },
+    "Did": {
+      "type": "string"
+    },
+    "QueryMsg": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "get_did_document"
+          ],
+          "properties": {
+            "get_did_document": {
+              "type": "object",
+              "required": [
+                "did"
+              ],
+              "properties": {
+                "did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "is_did_controller"
+          ],
+          "properties": {
+            "is_did_controller": {
+              "type": "object",
+              "required": [
+                "controller",
+                "did"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "is_controller_of"
+          ],
+          "properties": {
+            "is_controller_of": {
+              "type": "object",
+              "required": [
+                "controller",
+                "controllers"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "controllers": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Controller"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "do_controllers_exist"
+          ],
+          "properties": {
+            "do_controllers_exist": {
+              "type": "object",
+              "required": [
+                "controllers"
+              ],
+              "properties": {
+                "controllers": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/Controller"
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "does_controller_exist"
+          ],
+          "properties": {
+            "does_controller_exist": {
+              "type": "object",
+              "required": [
+                "controller"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "get_controlled_dids"
+          ],
+          "properties": {
+            "get_controlled_dids": {
+              "type": "object",
+              "required": [
+                "controller"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "limit": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint",
+                  "minimum": 0.0
+                },
+                "start_after": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "get_controlled_did_documents"
+          ],
+          "properties": {
+            "get_controlled_did_documents": {
+              "type": "object",
+              "required": [
+                "controller"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "limit": {
+                  "type": [
+                    "integer",
+                    "null"
+                  ],
+                  "format": "uint",
+                  "minimum": 0.0
+                },
+                "start_after": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

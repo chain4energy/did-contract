@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ExecuteMsg",
+  "anyOf": [
+    {
+      "$ref": "#/definitions/ExecMsg"
+    }
+  ],
+  "definitions": {
+    "Controller": {
+      "type": "string"
+    },
+    "Did": {
+      "type": "string"
+    },
+    "DidDocument": {
+      "type": "object",
+      "required": [
+        "controller",
+        "id",
+        "service"
+      ],
+      "properties": {
+        "controller": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Controller"
+          }
+        },
+        "id": {
+          "$ref": "#/definitions/Did"
+        },
+        "service": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/Service"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "ExecMsg": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "create_did_document"
+          ],
+          "properties": {
+            "create_did_document": {
+              "type": "object",
+              "required": [
+                "did_doc"
+              ],
+              "properties": {
+                "did_doc": {
+                  "$ref": "#/definitions/DidDocument"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "update_did_document"
+          ],
+          "properties": {
+            "update_did_document": {
+              "type": "object",
+              "required": [
+                "new_did_doc"
+              ],
+              "properties": {
+                "new_did_doc": {
+                  "$ref": "#/definitions/DidDocument"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "add_controller"
+          ],
+          "properties": {
+            "add_controller": {
+              "type": "object",
+              "required": [
+                "controller",
+                "did"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "delete_controller"
+          ],
+          "properties": {
+            "delete_controller": {
+              "type": "object",
+              "required": [
+                "controller",
+                "did"
+              ],
+              "properties": {
+                "controller": {
+                  "$ref": "#/definitions/Controller"
+                },
+                "did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "add_service"
+          ],
+          "properties": {
+            "add_service": {
+              "type": "object",
+              "required": [
+                "did",
+                "service"
+              ],
+              "properties": {
+                "did": {
+                  "$ref": "#/definitions/Did"
+                },
+                "service": {
+                  "$ref": "#/definitions/Service"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "delete_service"
+          ],
+          "properties": {
+            "delete_service": {
+              "type": "object",
+              "required": [
+                "did",
+                "service_did"
+              ],
+              "properties": {
+                "did": {
+                  "$ref": "#/definitions/Did"
+                },
+                "service_did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "delete_did_document"
+          ],
+          "properties": {
+            "delete_did_document": {
+              "type": "object",
+              "required": [
+                "did"
+              ],
+              "properties": {
+                "did": {
+                  "$ref": "#/definitions/Did"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "Service": {
+      "type": "object",
+      "required": [
+        "id",
+        "service_endpoint",
+        "type"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/Did"
+        },
+        "service_endpoint": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

@@ -6,7 +6,6 @@ artifacts/
 .e2e/
 .expand/
 .docker/
-schema/
 .github/
 *.code-workspace
 
